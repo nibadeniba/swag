@@ -32,6 +32,30 @@ func TestGen_Build(t *testing.T) {
 	//TODO: remove gen files
 }
 
+func TestGenDaddylabFile(t *testing.T) {
+	searchDir := "../testdata/daddylab"
+
+	config := &Config{
+		SearchDir:          searchDir,
+		MainAPIFile:        "./main.go",
+		OutputDir:          "../testdata/daddylab/docs",
+		PropNamingStrategy: "",
+	}
+	assert.NoError(t, New().Build(config))
+
+	if _, err := os.Stat(path.Join("../testdata/daddylab/docs", "docs.go")); os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path.Join("../testdata/daddylab/docs", "swagger.json")); os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path.Join("../testdata/daddylab/docs", "swagger.yaml")); os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+
+	//TODO: remove gen files
+}
+
 func TestGen_BuildSnakecase(t *testing.T) {
 	searchDir := "../testdata/simple2"
 	config := &Config{

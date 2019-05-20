@@ -57,6 +57,8 @@ type Parser struct {
 
 	ParseVendor bool
 
+	ParseDaddyLab bool
+
 	// ParseDependencies whether swag should be parse outside dependency folder
 	ParseDependency bool
 
@@ -142,13 +144,23 @@ func (parser *Parser) ParseAPI(searchDir string, mainAPIFile string) error {
 		parser.ParseType(astFile)
 	}
 
+	// 生成 接口 文档
 	for fileName, astFile := range parser.files {
-		if err := parser.ParseRouterAPIInfo(fileName, astFile); err != nil {
-			return err
+		if parser.ParseDaddyLab {
+			if err := parser.ParseForDaddyLab(fileName, astFile); err != nil {
+				return err
+			}
+		} else {
+			if err := parser.ParseRouterAPIInfo(fileName, astFile); err != nil {
+				return err
+			}
 		}
 	}
 
-	return parser.parseDefinitions()
+	// 生成 Beans 文档
+	parser.ParseDefinitions()
+
+	return nil
 }
 
 func getPkgName(searchDir string) (string, error) {
@@ -524,7 +536,51 @@ func getSchemes(commentLine string) []string {
 	return strings.Split(strings.TrimSpace(commentLine[len(attribute):]), " ")
 }
 
+// 扫描文件内的所有注释(DaddyLab使用)
+func (parser *Parser) ParseForDaddyLab(fileName string, astFile *ast.File) error {
+	for _, astComments := range astFile.Comments {
+		operation := NewOperation() //for per 'function' comment, create a new 'Operation' object
+		operation.parser = parser
+		for _, comment := range astComments.List {
+			// 忽略不是@的注释
+			if strings.Contains(comment.Text, "@") {
+				if err := operation.ParseComment(comment.Text, astFile); err != nil {
+					return fmt.Errorf("ParseComment error in file %s :%+v", fileName, err)
+				}
+			}
+		}
+		var pathItem spec.PathItem
+		var ok bool
+
+		if pathItem, ok = parser.swagger.Paths.Paths[operation.Path]; !ok {
+			pathItem = spec.PathItem{}
+		}
+		switch strings.ToUpper(operation.HTTPMethod) {
+		case http.MethodGet:
+			pathItem.Get = &operation.Operation
+		case http.MethodPost:
+			pathItem.Post = &operation.Operation
+		case http.MethodDelete:
+			pathItem.Delete = &operation.Operation
+		case http.MethodPut:
+			pathItem.Put = &operation.Operation
+		case http.MethodPatch:
+			pathItem.Patch = &operation.Operation
+		case http.MethodHead:
+			pathItem.Head = &operation.Operation
+		case http.MethodOptions:
+			pathItem.Options = &operation.Operation
+		}
+
+		if len(operation.Path) != 0 {
+			parser.swagger.Paths.Paths[operation.Path] = pathItem
+		}
+	}
+	return nil
+}
+
 // ParseRouterAPIInfo parses router api info for given astFile
+// 扫描文件内的函数注释
 func (parser *Parser) ParseRouterAPIInfo(fileName string, astFile *ast.File) error {
 	for _, astDescription := range astFile.Decls {
 		switch astDeclaration := astDescription.(type) {
@@ -1361,6 +1417,7 @@ func (parser *Parser) parseFile(path string) error {
 			return fmt.Errorf("ParseFile error:%+v", err)
 		}
 
+		// 把文件信息保存在 parser 中
 		parser.files[path] = astFile
 	}
 	return nil

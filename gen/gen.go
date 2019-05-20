@@ -44,6 +44,9 @@ type Config struct {
 	// ParseDependencies whether swag should be parse outside dependency folder
 	ParseDependency bool
 
+	//ParseDaddyLab is parse DaddyLab Dir
+	ParseDaddyLab bool
+
 	// MarkdownFilesDir used to find markdownfiles, which can be used for tag descriptions
 	MarkdownFilesDir string
 }
@@ -58,6 +61,7 @@ func (g *Gen) Build(config *Config) error {
 	p := swag.New(swag.SetMarkdownFileDirectory(config.MarkdownFilesDir))
 	p.PropNamingStrategy = config.PropNamingStrategy
 	p.ParseVendor = config.ParseVendor
+	p.ParseDaddyLab = config.ParseDaddyLab
 	p.ParseDependency = config.ParseDependency
 
 	if err := p.ParseAPI(config.SearchDir, config.MainAPIFile); err != nil {

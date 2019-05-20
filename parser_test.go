@@ -2,13 +2,16 @@ package swag
 
 import (
 	"encoding/json"
+	"fmt"
 	goparser "go/parser"
 	"go/token"
 	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"testing"
+	"text/tabwriter"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -2347,6 +2350,78 @@ func Test(){
 
 	assert.True(t, ok)
 	assert.NotNil(t, val.Delete)
+}
+
+func TestForTabwriter(t *testing.T) {
+	src := `
+// @Summary  List accounts
+// @Description  get accounts
+// @Accept  json
+// @Produce  json
+// @Param  q  query  string  false  "name search by q"
+// @Param  ffsaq  query  string  false  "name search by q"
+// @Param  ffadq  query  string  false  "name search by q"
+// @Param  qdfffffa  query  string  false  "name search by q"
+// @Header  200  {string}  Token "qwerty"
+// @Success  200  {array}  model.Account
+// @Failure  400  {object}  httputil.HTTPError
+// @Failure  404  {object}  httputil.HTTPError
+// @Failure  500  {object}  httputil.HTTPError
+// @Router  /accounts  [get]
+`
+
+	src = `
+// @title  Swagger Example API
+// @version  1.0
+// @description  This is a sample server celler server.
+// @termsOfService  http://swagger.io/terms/
+
+// @contact.name  API Support
+// @contact.url  http://www.swagger.io/support
+// @contact.email  support@swagger.io
+
+// @license.name  Apache 2.0
+// @license.url  http://www.apache.org/licenses/LICENSE-2.0.html
+
+// @host  localhost:8080
+// @BasePath  /api/v1
+
+// @securityDefinitions.basic  BasicAuth
+
+// @securityDefinitions.apikey  ApiKeyAuth
+// @in  header
+// @name  Authorization
+
+// @securitydefinitions.oauth2.application  OAuth2Application
+// @tokenUrl  https://example.com/oauth/token
+// @scope.write  Grants write access
+// @scope.admin  Grants read and write access to administrative information
+
+// @securitydefinitions.oauth2.implicit  OAuth2Implicit
+// @authorizationurl  https://example.com/oauth/authorize
+// @scope.write  Grants write access
+// @scope.admin  Grants read and write access to administrative information
+
+// @securitydefinitions.oauth2.password  OAuth2Password
+// @tokenUrl  https://example.com/oauth/token
+// @scope.read  Grants read access
+// @scope.write  Grants write access
+// @scope.admin  Grants read and write access to administrative information
+
+// @securitydefinitions.oauth2.accessCode  OAuth2AccessCode
+// @tokenUrl  https://example.com/oauth/token
+// @authorizationurl  https://example.com/oauth/authorize
+// @scope.admin  Grants read and write access to administrative information
+`
+
+	srcs := strings.Split(src, "\n")
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.Debug)
+
+	for _, e := range srcs {
+		ee := strings.ReplaceAll(e, "  ", "	")
+		fmt.Fprintln(w, ee)
+	}
+	w.Flush()
 }
 
 func TestParser_ParseRouterApiPUT(t *testing.T) {

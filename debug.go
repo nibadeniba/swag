@@ -9,7 +9,7 @@ const (
 	release
 )
 
-var swagMode = release
+var swagMode = test
 
 func isRelease() bool {
 	return swagMode == release

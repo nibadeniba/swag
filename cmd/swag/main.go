@@ -5,9 +5,10 @@ import (
 	"os"
 
 	"github.com/pkg/errors"
+	"github.com/urfave/cli"
+
 	"github.com/swaggo/swag"
 	"github.com/swaggo/swag/gen"
-	"github.com/urfave/cli"
 )
 
 const searchDirFlag = "dir"
@@ -17,6 +18,7 @@ const outputFlag = "output"
 const parseVendorFlag = "parseVendor"
 const parseDependency = "parseDependency"
 const markdownFilesDirFlag = "markdownFiles"
+const parseDaddyLab = "parseDaddyLab"
 
 func main() {
 	app := cli.NewApp()
@@ -35,6 +37,7 @@ func main() {
 				parseVendor := c.Bool(parseVendorFlag)
 				parseDependency := c.Bool(parseDependency)
 				markdownFilesDir := c.String(markdownFilesDirFlag)
+				parseDaddyLab := c.Bool(parseDaddyLab)
 
 				switch strategy {
 				case swag.CamelCase, swag.SnakeCase, swag.PascalCase:
@@ -50,6 +53,7 @@ func main() {
 					ParseVendor:        parseVendor,
 					ParseDependency:    parseDependency,
 					MarkdownFilesDir:   markdownFilesDir,
+					ParseDaddyLab:      parseDaddyLab,
 				})
 			},
 			Flags: []cli.Flag{
@@ -85,6 +89,29 @@ func main() {
 					Name:  "markdownFiles, md",
 					Value: "",
 					Usage: "Parse folder containing markdown files to use as description, disabled by default",
+				},
+				cli.BoolFlag{
+					Name:  "parseDaddyLab, D",
+					Usage: "解析DaddyLab的项目 Main-Router 结构",
+				},
+			},
+		},
+		{
+			Name:    "fmt",
+			Aliases: []string{"f"},
+			Usage:   "format swagger comments",
+			Action: func(c *cli.Context) error {
+				searchDir := c.String("dir")
+
+				return format.New().Build(&format.Config{
+					SearchDir: searchDir,
+				})
+			},
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  "dir, d",
+					Value: "./",
+					Usage: "Directory you want to parse",
 				},
 			},
 		},
