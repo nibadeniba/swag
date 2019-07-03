@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/md5"
 	"fmt"
-	"github.com/pkg/errors"
 	goparser "go/parser"
 	"go/token"
 	"io/ioutil"
@@ -13,10 +12,11 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
-	"text/tabwriter"
+
+	"github.com/pkg/errors"
 )
 
-const SplitTag = "🐶"
+const SplitTag = "&*"
 
 type Formater struct {
 	parser *Parser
@@ -57,7 +57,7 @@ func (formater *Formater) FormatFile(filepath string) error {
 		return errors.Wrap(err, "cannot parse main files,path :"+filepath)
 	}
 	formatedComments := bytes.Buffer{}
-	tabw := tabwriter.NewWriter(&formatedComments, 0, 0, 3, ' ', 0)
+	tabw := NewWriter(&formatedComments, 0, 0, 3, ' ', 0)
 
 	oldCommentsMap := make(map[string]string)
 
@@ -98,22 +98,23 @@ func (formater *Formater) FormatFile(filepath string) error {
 
 			if !IsBlankComment(commentContent) {
 				oldComment := oldCommentsMap[commentHash]
-				oldHash := MD5(oldComment)
-				fmt.Println(commentHash, " ", commentContent, " Old=", oldComment, "OldHash=", oldHash)
 				if strings.Contains(src, oldComment) {
 					src = strings.Replace(src, oldComment, commentContent, 1)
 				}
 			}
 		}
 	}
+	return WriteBack(filepath, []byte(src), srcBytes)
+}
 
+func WriteBack(filepath string, src, old []byte) error {
 	// Write back (use golang/gofmt)
 	// make a temporary backup before overwriting original
-	bakname, err := backupFile(filepath+".", srcBytes, 0644)
+	bakname, err := backupFile(filepath+".", old, 0644)
 	if err != nil {
 		return err
 	}
-	err = ioutil.WriteFile(filepath, []byte(src), 0644)
+	err = ioutil.WriteFile(filepath, src, 0644)
 	if err != nil {
 		os.Rename(bakname, filepath)
 		return err

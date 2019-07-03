@@ -8,7 +8,9 @@ import (
 	"github.com/urfave/cli"
 
 	"github.com/swaggo/swag"
+	"github.com/swaggo/swag/format"
 	"github.com/swaggo/swag/gen"
+	"github.com/swaggo/swag/replace"
 )
 
 const searchDirFlag = "dir"
@@ -112,6 +114,38 @@ func main() {
 					Name:  "dir, d",
 					Value: "./",
 					Usage: "Directory you want to parse",
+				},
+			},
+		},
+		{
+			Name:    "replacement",
+			Aliases: []string{"rp"},
+			Usage:   "replace special tag by swagger format comments",
+			Action: func(c *cli.Context) error {
+				searchDir := c.String("dir")
+				mainFile := c.String("main")
+				detail := c.Bool("helpInfo")
+
+				return replace.New().Build(&replace.Config{
+					SearchDir: searchDir,
+					MainFile:  mainFile,
+					Detail:    detail,
+				})
+			},
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  "main, m",
+					Value: "main.go",
+					Usage: "Go file path in which 'swagger general API Info' is written",
+				},
+				cli.StringFlag{
+					Name:  "dir, d",
+					Value: "./",
+					Usage: "Directory you want to parse",
+				},
+				cli.BoolFlag{
+					Name:  "helpInfo, h",
+					Usage: "show more info",
 				},
 			},
 		},

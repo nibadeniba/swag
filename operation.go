@@ -33,7 +33,9 @@ var mimeTypeAliases = map[string]string{
 	"plain":                 "text/plain",
 	"html":                  "text/html",
 	"mpfd":                  "multipart/form-data",
+	"form":                  "multipart/form-data",
 	"x-www-form-urlencoded": "application/x-www-form-urlencoded",
+	"x-form":                "application/x-www-form-urlencoded",
 	"json-api":              "application/vnd.api+json",
 	"json-stream":           "application/x-json-stream",
 	"octet-stream":          "application/octet-stream",
@@ -65,13 +67,13 @@ func (operation *Operation) ParseComment(comment string, astFile *ast.File) erro
 	attribute := strings.Fields(commentLine)[0]
 	lineRemainder := strings.TrimSpace(commentLine[len(attribute):])
 	switch strings.ToLower(attribute) {
-	case "@description":
+	case "@desc":
 		if operation.Description == "" {
 			operation.Description = lineRemainder
 		} else {
 			operation.Description += "\n" + lineRemainder
 		}
-	case "@summary":
+	case "@title":
 		operation.Summary = lineRemainder
 	case "@id":
 		operation.ID = lineRemainder
@@ -89,7 +91,7 @@ func (operation *Operation) ParseComment(comment string, astFile *ast.File) erro
 		if err := operation.ParseParamComment(lineRemainder, astFile); err != nil {
 			return err
 		}
-	case "@success", "@failure":
+	case "@success", "@fail":
 		if err := operation.ParseResponseComment(lineRemainder, astFile); err != nil {
 			if err := operation.ParseEmptyResponseComment(lineRemainder); err != nil {
 				if err := operation.ParseEmptyResponseOnly(lineRemainder); err != nil {
@@ -117,24 +119,70 @@ func (operation *Operation) ParseComment(comment string, astFile *ast.File) erro
 
 var paramPattern = regexp.MustCompile(`(\S+)[\s]+([\w]+)[\s]+([\S.]+)[\s]+([\w]+)[\s]+"([^"]+)"`)
 
-// ParseParamComment parses params return []string of param properties
-// E.g. @Param	queryText		formData	      string	  true		        "The email for login"
-//              [param name]    [paramType] [data type]  [is mandatory?]   [Comment]
-// E.g. @Param   some_id     path    int     true        "Some ID"
-func (operation *Operation) ParseParamComment(commentLine string, astFile *ast.File) error {
-	matches := paramPattern.FindStringSubmatch(commentLine)
-	if len(matches) != 6 {
-		return fmt.Errorf("missing required param comment parameters \"%s\"", commentLine)
+func (operation *Operation) findMatches(matches []string) (name string, paramType string, schemaType string, require bool, desc string) {
+	var inT = []string{"query", "path", "header", "body", "form"}
+	var defaultSchema string
+	if operation.HTTPMethod == "GET" {
+		defaultSchema = "query"
+	} else if operation.HTTPMethod == "PUT" || operation.HTTPMethod == "DELETE" || operation.HTTPMethod == "PATCH" {
+		defaultSchema = "path"
+	} else if operation.HTTPMethod == "POST" {
+		defaultSchema = "body"
 	}
-	name := matches[1]
-	paramType := matches[2]
 
-	schemaType := matches[3]
+	name = matches[1]
+	paramType = matches[2]
 
-	requiredText := strings.ToLower(matches[4])
-	required := requiredText == "true" || requiredText == "required"
-	description := matches[5]
+	switch len(matches) {
+	case 4:
+		// @Param   --name       string   筛选姓名
+		schemaType = defaultSchema
+		require = true
+		desc = matches[3]
+		return
+	case 5, 6:
+		desc = matches[len(matches)-1]
 
+		if has(inT, matches[3]) {
+			schemaType = matches[3]
+		} else if matches[3] == "true" || matches[3] == "false" ||
+			matches[3] == "T" || matches[3] == "F" {
+			schemaType = defaultSchema
+			require, _ = strconv.ParseBool(matches[3])
+		} else {
+			schemaType = defaultSchema
+			require = true
+		}
+
+		if len(matches) == 6 {
+			if matches[4] == "true" || matches[4] == "false" ||
+				matches[4] == "T" || matches[4] == "F" {
+				schemaType = defaultSchema
+				require, _ = strconv.ParseBool(matches[4])
+			} else {
+				schemaType = defaultSchema
+				require = true
+			}
+		}
+	}
+	return
+}
+
+func has(s []string, key string) bool {
+	for i := range s {
+		if key == s[i] {
+			return true
+		}
+	}
+	return false
+}
+
+// ParseParamComment parses params return []string of param properties
+// E.g. @Param	queryText		formData	    string	           true		     "The email for login"   enums(1,2,3)
+//              [param name]    [paramType]   [data type]     [is mandatory?]    [Comment]               [attribute(optional)]
+// Also: @Param   some_id          int       (default:query)   (default:true)    "Some ID"
+func (operation *Operation) ParseParamComment(commentLine string, astFile *ast.File) error {
+	name, paramType, schemaType, required, description := operation.findMatches(strings.Fields(commentLine))
 	var param spec.Parameter
 
 	//five possible parameter types.
@@ -142,14 +190,14 @@ func (operation *Operation) ParseParamComment(commentLine string, astFile *ast.F
 	case "query", "path", "header":
 		param = createParameter(paramType, description, name, TransToValidSchemeType(schemaType), required)
 	case "body":
-		param = createParameter(paramType, description, name, "object", required) // TODO: if Parameter types can be objects, but also primitives and arrays
+		param = createParameter(paramType, description, name, TransToValidSchemeType(schemaType), required) // TODO: if Parameter types can be objects, but also primitives and arrays
 		if err := operation.registerSchemaType(schemaType, astFile); err != nil {
 			return err
 		}
 		param.Schema.Ref = spec.Ref{
 			Ref: jsonreference.MustCreateRef("#/definitions/" + schemaType),
 		}
-	case "formData":
+	case "form":
 		param = createParameter(paramType, description, name, TransToValidSchemeType(schemaType), required)
 	default:
 		return fmt.Errorf("%s is not supported paramType", paramType)
@@ -668,12 +716,14 @@ func (operation *Operation) ParseEmptyResponseOnly(commentLine string) error {
 // createParameter returns swagger spec.Parameter for gived  paramType, description, paramName, schemaType, required
 func createParameter(paramType, description, paramName, schemaType string, required bool) spec.Parameter {
 	// //five possible parameter types. 	query, path, body, header, form
+	// schemaType can be . int number string bool struct array_xxx
 	paramProps := spec.ParamProps{
 		Name:        paramName,
 		Description: description,
 		Required:    required,
 		In:          paramType,
 	}
+
 	if paramType == "body" {
 		paramProps.Schema = &spec.Schema{
 			SchemaProps: spec.SchemaProps{

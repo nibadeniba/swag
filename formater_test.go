@@ -1,11 +1,12 @@
 package swag
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestFormater_FormatMainFile(t *testing.T) {
 	formater := NewFormater()
-	assert.NoError(t, formater.FormatAPI("testdata/daddylab"))
+	assert.NoError(t, formater.FormatFile("replacer.go"))
 }

@@ -158,7 +158,7 @@ func (parser *Parser) ParseAPI(searchDir string, mainAPIFile string) error {
 	}
 
 	// 生成 Beans 文档
-	parser.ParseDefinitions()
+	parser.parseDefinitions()
 
 	return nil
 }
@@ -219,13 +219,13 @@ func (parser *Parser) ParseGeneralAPIInfo(mainAPIFile string) error {
 					parser.swagger.Info.Version = strings.TrimSpace(commentLine[len(attribute):])
 				case "@title":
 					parser.swagger.Info.Title = strings.TrimSpace(commentLine[len(attribute):])
-				case "@description":
+				case "@desc":
 					if parser.swagger.Info.Description == "{{.Description}}" {
 						parser.swagger.Info.Description = strings.TrimSpace(commentLine[len(attribute):])
 					} else if multilineBlock {
 						parser.swagger.Info.Description += "\n" + strings.TrimSpace(commentLine[len(attribute):])
 					}
-				case "@description.markdown":
+				case "@desc.markdown":
 					filePath, err := getMarkdownFileForTag("api", parser.markdownFileDir)
 					if err != nil {
 						return err
@@ -325,9 +325,9 @@ func (parser *Parser) ParseGeneralAPIInfo(mainAPIFile string) error {
 			for i := 0; i < len(comments); i++ {
 				attribute := strings.ToLower(strings.Split(comments[i], " ")[0])
 				switch attribute {
-				case "@securitydefinitions.basic":
+				case "@securityDef.basic":
 					securityMap[strings.TrimSpace(comments[i][len(attribute):])] = spec.BasicAuth()
-				case "@securitydefinitions.apikey":
+				case "@securityDef.apikey":
 					attrMap := map[string]string{}
 					for _, v := range comments[i+1:] {
 						securityAttr := strings.ToLower(strings.Split(v, " ")[0])
@@ -335,15 +335,15 @@ func (parser *Parser) ParseGeneralAPIInfo(mainAPIFile string) error {
 							attrMap[securityAttr] = strings.TrimSpace(v[len(securityAttr):])
 						}
 						// next securityDefinitions
-						if strings.Index(securityAttr, "@securitydefinitions.") == 0 {
+						if strings.Index(securityAttr, "@securityDef.") == 0 {
 							break
 						}
 					}
 					if len(attrMap) != 2 {
-						return errors.New("@securitydefinitions.apikey is @name and @in required")
+						return errors.New("@securityDef.apikey is @name and @in required")
 					}
 					securityMap[strings.TrimSpace(comments[i][len(attribute):])] = spec.APIKeyAuth(attrMap["@name"], attrMap["@in"])
-				case "@securitydefinitions.oauth2.application":
+				case "@securityDef.oauth2.application":
 					attrMap := map[string]string{}
 					scopes := map[string]string{}
 					for _, v := range comments[i+1:] {
@@ -364,19 +364,19 @@ func (parser *Parser) ParseGeneralAPIInfo(mainAPIFile string) error {
 							}
 						}
 						// next securityDefinitions
-						if strings.Index(securityAttr, "@securitydefinitions.") == 0 {
+						if strings.Index(securityAttr, "@securityDef.") == 0 {
 							break
 						}
 					}
 					if len(attrMap) != 1 {
-						return errors.New("@securitydefinitions.oauth2.application is @tokenUrl required")
+						return errors.New("@securityDef.oauth2.application is @tokenUrl required")
 					}
 					securityScheme := spec.OAuth2Application(attrMap["@tokenurl"])
 					for scope, description := range scopes {
 						securityScheme.AddScope(scope, description)
 					}
 					securityMap[strings.TrimSpace(comments[i][len(attribute):])] = securityScheme
-				case "@securitydefinitions.oauth2.implicit":
+				case "@securityDef.oauth2.implicit":
 					attrMap := map[string]string{}
 					scopes := map[string]string{}
 					for _, v := range comments[i+1:] {
@@ -397,19 +397,19 @@ func (parser *Parser) ParseGeneralAPIInfo(mainAPIFile string) error {
 							}
 						}
 						// next securityDefinitions
-						if strings.Index(securityAttr, "@securitydefinitions.") == 0 {
+						if strings.Index(securityAttr, "@securityDef.") == 0 {
 							break
 						}
 					}
 					if len(attrMap) != 1 {
-						return errors.New("@securitydefinitions.oauth2.implicit is @authorizationUrl required")
+						return errors.New("@securityDef.oauth2.implicit is @authorizationUrl required")
 					}
 					securityScheme := spec.OAuth2Implicit(attrMap["@authorizationurl"])
 					for scope, description := range scopes {
 						securityScheme.AddScope(scope, description)
 					}
 					securityMap[strings.TrimSpace(comments[i][len(attribute):])] = securityScheme
-				case "@securitydefinitions.oauth2.password":
+				case "@securityDef.oauth2.password":
 					attrMap := map[string]string{}
 					scopes := map[string]string{}
 					for _, v := range comments[i+1:] {
@@ -430,19 +430,19 @@ func (parser *Parser) ParseGeneralAPIInfo(mainAPIFile string) error {
 							}
 						}
 						// next securityDefinitions
-						if strings.Index(securityAttr, "@securitydefinitions.") == 0 {
+						if strings.Index(securityAttr, "@securityDef.") == 0 {
 							break
 						}
 					}
 					if len(attrMap) != 1 {
-						return errors.New("@securitydefinitions.oauth2.password is @tokenUrl required")
+						return errors.New("@securityDef.oauth2.password is @tokenUrl required")
 					}
 					securityScheme := spec.OAuth2Password(attrMap["@tokenurl"])
 					for scope, description := range scopes {
 						securityScheme.AddScope(scope, description)
 					}
 					securityMap[strings.TrimSpace(comments[i][len(attribute):])] = securityScheme
-				case "@securitydefinitions.oauth2.accesscode":
+				case "@securityDef.oauth2.accesscode":
 					attrMap := map[string]string{}
 					scopes := map[string]string{}
 					for _, v := range comments[i+1:] {
@@ -463,12 +463,12 @@ func (parser *Parser) ParseGeneralAPIInfo(mainAPIFile string) error {
 							}
 						}
 						// next securityDefinitions
-						if strings.Index(securityAttr, "@securitydefinitions.") == 0 {
+						if strings.Index(securityAttr, "@securityDef.") == 0 {
 							break
 						}
 					}
 					if len(attrMap) != 2 {
-						return errors.New("@securitydefinitions.oauth2.accessCode is @tokenUrl and @authorizationUrl required")
+						return errors.New("@securityDef.oauth2.accessCode is @tokenUrl and @authorizationUrl required")
 					}
 					securityScheme := spec.OAuth2AccessToken(attrMap["@authorizationurl"], attrMap["@tokenurl"])
 					for scope, description := range scopes {
@@ -581,6 +581,51 @@ func (parser *Parser) ParseForDaddyLab(fileName string, astFile *ast.File) error
 
 // ParseRouterAPIInfo parses router api info for given astFile
 // 扫描文件内的函数注释
+// @title      DailyPushList
+// @desc       获取图片列表哈
+// @Tags       前端
+// @Router     /daily/push_list   [POST]
+// @Accept     form
+// @Param      pageIndex          int            query          T   default(1)    页码
+// @Param      pageSize           int            query          T   default(10)   每页个数
+// @Param      sort               string         query          F   排序字段
+// @Param      descending         bool           query          F   升序降序
+// @Param      filter             struct         F              筛选字段结构的字符串
+// @Param      -status            string         enums(1,2,3)   状态
+// @Param      -tel               array_struct   筛选电话
+// @Param      --id               int            电话ID
+// @Param      --detail           string         电话详情
+// @Param      -name              string         筛选姓名
+// @Param      resource_id        int            form   资源ID
+// @Param      resource           bll.Resource   body   资源
+// @Success    {simple}           string         default(" ") format(url)  CDN链接
+// @Success    {object}           bll.CModel     返回值
+// @Success    {array_object}     bll.BModel     返回值2
+// @Success    {struct}           data           返回值3
+// @Success    {-}                name           string   用户名
+// @Success    {-}                tel            string   用户的手机号
+// @Success    {-struct}          addr           string   地址信息
+// @Success    {--}               province       string   省
+// @Success    {--}               area           int      format(code)   地区
+// @Success    {--array_struct}   area_code      string   地区码
+// @Success    {---}              code           int      编码
+// @Success    {-array_struct}    scores         float    分数表
+// @Success    {--}               score          float    分数
+// @Fail       400                [1031]         可定义自己的状态码
+// @Fail       500                也可不定义，只做解释
+// @Security   JWT_Token
+/*
+type ParamFilter struct{
+	Status string `enums:"1,2,3"` // 状态
+	Tel    []ParamTel  // 筛选电话
+    Name string // 筛选姓名
+}
+*/
+/*
+type ParamTel struct{
+	Id int // 电话ID
+}	Detail string // 电话详情
+*/
 func (parser *Parser) ParseRouterAPIInfo(fileName string, astFile *ast.File) error {
 	for _, astDescription := range astFile.Decls {
 		switch astDeclaration := astDescription.(type) {
