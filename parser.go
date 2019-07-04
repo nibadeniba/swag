@@ -158,7 +158,10 @@ func (parser *Parser) ParseAPI(searchDir string, mainAPIFile string) error {
 	}
 
 	// 生成 Beans 文档
-	parser.parseDefinitions()
+	if err := parser.parseDefinitions(); err != nil {
+		fmt.Println("error:", err)
+		return err
+	}
 
 	return nil
 }
@@ -586,33 +589,33 @@ func (parser *Parser) ParseForDaddyLab(fileName string, astFile *ast.File) error
 // @Tags       前端
 // @Router     /daily/push_list   [POST]
 // @Accept     form
-// @Param      pageIndex          int            query          T   default(1)    页码
-// @Param      pageSize           int            query          T   default(10)   每页个数
-// @Param      sort               string         query          F   排序字段
-// @Param      descending         bool           query          F   升序降序
-// @Param      filter             struct         F              筛选字段结构的字符串
-// @Param      -status            string         enums(1,2,3)   状态
-// @Param      -tel               array_struct   筛选电话
-// @Param      --id               int            电话ID
-// @Param      --detail           string         电话详情
-// @Param      -name              string         筛选姓名
-// @Param      resource_id        int            form   资源ID
-// @Param      resource           bll.Resource   body   资源
-// @Success    {simple}           string         default(" ") format(url)  CDN链接
-// @Success    {object}           bll.CModel     返回值
-// @Success    {array_object}     bll.BModel     返回值2
-// @Success    {struct}           data           返回值3
-// @Success    {-}                name           string   用户名
-// @Success    {-}                tel            string   用户的手机号
-// @Success    {-struct}          addr           string   地址信息
-// @Success    {--}               province       string   省
-// @Success    {--}               area           int      format(code)   地区
-// @Success    {--array_struct}   area_code      string   地区码
-// @Success    {---}              code           int      编码
-// @Success    {-array_struct}    scores         float    分数表
-// @Success    {--}               score          float    分数
-// @Fail       400                [1031]         可定义自己的状态码
-// @Fail       500                也可不定义，只做解释
+// @Param      pageIndex    int            query          T   default(1)    页码
+// @Param      pageSize     int            query          T   default(10)   每页个数
+// @Param      sort         string         query          F   排序字段
+// @Param      descending   bool           query          F   升序降序
+// @Param      filter       struct         F              筛选字段结构的字符串
+// @Param      -status      string         enums(1,2,3)   状态
+// @Param      -tel         array_struct   筛选电话
+// @Param      --id         int            电话ID
+// @Param      --detail     string         电话详情
+// @Param      -name        string         筛选姓名
+// @Param      -
+// @Param      resource_id   int            form   资源ID
+// @Param      resource      bll.Resource   body   资源
+// @Single     string        简单的返回值（用于操作型API，简单的API）
+// @Success    {object}      bll.CModel     T   返回值
+// @Success    {array}       bll.BModel     T   返回值2
+// @Success    data          struct         T   返回值3
+// @Success    -name         string         T   用户名
+// @Success    -tel          string         T   用户的手机号
+// @Success    -addr         struct         T   地址信息
+// @Success    --province    string         T   省
+// @Success    --area        int            T   format(code)   地区
+// @Success    --area_code   array_struct   T   地区码
+// @Success    ---code       int            T   编码
+// @Success    -
+// @Fail       400   [1031]   可定义自己的状态码
+// @Fail       500   也可不定义，只做解释
 // @Security   JWT_Token
 /*
 type ParamFilter struct{
@@ -620,8 +623,7 @@ type ParamFilter struct{
 	Tel    []ParamTel  // 筛选电话
     Name string // 筛选姓名
 }
-*/
-/*
+
 type ParamTel struct{
 	Id int // 电话ID
 }	Detail string // 电话详情

@@ -27,6 +27,7 @@ func IsNumericType(typeName string) bool {
 
 // TransToValidSchemeType indicates type will transfer golang basic type to swagger supported type.
 func TransToValidSchemeType(typeName string) string {
+	typeName = DelArray(typeName)
 	switch typeName {
 	case "uint", "int", "uint8", "int8", "uint16", "int16", "byte":
 		return "integer"

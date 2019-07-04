@@ -25,6 +25,78 @@ type Operation struct {
 	spec.Operation
 
 	parser *Parser
+
+	// Struct 结构
+	SP *StructPto
+
+	LastPto Pto
+}
+
+type Pto interface {
+	Add(pto *FieldPto)
+	AddPre(pto *FieldPto)
+	GetLevel() int
+}
+
+type StructPto struct {
+	Name     string
+	Required bool
+	Desc     string
+	IsArray  bool
+	Fields   []FieldPto
+}
+
+func (self *StructPto) Add(pto *FieldPto) {
+	if self.Fields == nil {
+		self.Fields = make([]FieldPto, 0)
+	}
+	self.Fields = append(self.Fields, *pto)
+}
+
+func (self *StructPto) AddPre(pto *FieldPto) {
+	if self.Fields == nil {
+		self.Fields = make([]FieldPto, 0)
+	}
+	self.Fields = append(self.Fields, *pto)
+}
+
+func (self *StructPto) Map2GoFile() string {
+
+	return ""
+}
+
+func (self *StructPto) GetLevel() int {
+	return 0
+}
+
+type FieldPto struct {
+	Name     string
+	Required bool
+	Level    int
+	Type     string
+	Desc     string
+	Ex       string
+	Pre      Pto
+
+	IsArray bool
+	Child   []FieldPto
+}
+
+func (self *FieldPto) Add(pto *FieldPto) {
+	if self.Child == nil {
+		self.Child = make([]FieldPto, 0)
+	}
+	self.Child = append(self.Child, *pto)
+}
+
+func (self *FieldPto) AddPre(pto *FieldPto) {
+	if self.Pre != nil {
+		self.Pre.Add(pto)
+	}
+}
+
+func (self *FieldPto) GetLevel() int {
+	return self.Level
 }
 
 var mimeTypeAliases = map[string]string{
@@ -91,14 +163,15 @@ func (operation *Operation) ParseComment(comment string, astFile *ast.File) erro
 		if err := operation.ParseParamComment(lineRemainder, astFile); err != nil {
 			return err
 		}
-	case "@success", "@fail":
+	case "@success":
 		if err := operation.ParseResponseComment(lineRemainder, astFile); err != nil {
-			if err := operation.ParseEmptyResponseComment(lineRemainder); err != nil {
-				if err := operation.ParseEmptyResponseOnly(lineRemainder); err != nil {
-					return err
-				}
-			}
+			return err
 		}
+	case "@fail":
+		if err := operation.ParseFailComment(lineRemainder, astFile); err != nil {
+			return err
+		}
+	case "@single":
 	case "@header":
 		if err := operation.ParseResponseHeaderComment(lineRemainder, astFile); err != nil {
 			return err
@@ -119,24 +192,33 @@ func (operation *Operation) ParseComment(comment string, astFile *ast.File) erro
 
 var paramPattern = regexp.MustCompile(`(\S+)[\s]+([\w]+)[\s]+([\S.]+)[\s]+([\w]+)[\s]+"([^"]+)"`)
 
-func (operation *Operation) findMatches(matches []string) (name string, paramType string, schemaType string, require bool, desc string) {
+func (operation *Operation) findMatches(matches []string) (name string, schemaType string, paramType string, require bool, desc string) {
 	var inT = []string{"query", "path", "header", "body", "form"}
-	var defaultSchema string
+	var defaultParam string
 	if operation.HTTPMethod == "GET" {
-		defaultSchema = "query"
+		defaultParam = "query"
 	} else if operation.HTTPMethod == "PUT" || operation.HTTPMethod == "DELETE" || operation.HTTPMethod == "PATCH" {
-		defaultSchema = "path"
+		defaultParam = "path"
 	} else if operation.HTTPMethod == "POST" {
-		defaultSchema = "body"
+		defaultParam = "body"
+	}
+
+	if len(matches) < 4 {
+		if len(matches) > 2 {
+			if matches[1] == "-" {
+				return "EndStruct", "", "", false, ""
+			}
+		}
+		return "", "", "", false, ""
 	}
 
 	name = matches[1]
-	paramType = matches[2]
+	schemaType = matches[2]
 
 	switch len(matches) {
 	case 4:
 		// @Param   --name       string   筛选姓名
-		schemaType = defaultSchema
+		paramType = defaultParam
 		require = true
 		desc = matches[3]
 		return
@@ -144,27 +226,31 @@ func (operation *Operation) findMatches(matches []string) (name string, paramTyp
 		desc = matches[len(matches)-1]
 
 		if has(inT, matches[3]) {
-			schemaType = matches[3]
+			paramType = matches[3]
 		} else if matches[3] == "true" || matches[3] == "false" ||
 			matches[3] == "T" || matches[3] == "F" {
-			schemaType = defaultSchema
+			paramType = defaultParam
 			require, _ = strconv.ParseBool(matches[3])
 		} else {
-			schemaType = defaultSchema
+			paramType = defaultParam
 			require = true
 		}
 
 		if len(matches) == 6 {
 			if matches[4] == "true" || matches[4] == "false" ||
 				matches[4] == "T" || matches[4] == "F" {
-				schemaType = defaultSchema
+				paramType = defaultParam
 				require, _ = strconv.ParseBool(matches[4])
 			} else {
-				schemaType = defaultSchema
+				paramType = defaultParam
 				require = true
 			}
 		}
 	}
+	if paramType == "form" {
+		paramType = "formData"
+	}
+
 	return
 }
 
@@ -182,25 +268,107 @@ func has(s []string, key string) bool {
 //              [param name]    [paramType]   [data type]     [is mandatory?]    [Comment]               [attribute(optional)]
 // Also: @Param   some_id          int       (default:query)   (default:true)    "Some ID"
 func (operation *Operation) ParseParamComment(commentLine string, astFile *ast.File) error {
-	name, paramType, schemaType, required, description := operation.findMatches(strings.Fields(commentLine))
+	name, schemaType, paramType, required, description := operation.findMatches(strings.Fields(commentLine))
+	if len(name) == 0 {
+		return errors.New(" Parse Error : Check you param len in : " + commentLine)
+	}
 	var param spec.Parameter
 
-	//five possible parameter types.
-	switch paramType {
-	case "query", "path", "header":
-		param = createParameter(paramType, description, name, TransToValidSchemeType(schemaType), required)
-	case "body":
-		param = createParameter(paramType, description, name, TransToValidSchemeType(schemaType), required) // TODO: if Parameter types can be objects, but also primitives and arrays
-		if err := operation.registerSchemaType(schemaType, astFile); err != nil {
-			return err
+	if strings.HasPrefix(name, "-") || schemaType == "struct" {
+		// Struct 参数
+		isArray := strings.HasPrefix(schemaType, "array")
+		schemaType = DelArray(schemaType)
+
+		// +++开始+++
+		if schemaType == "struct" && !strings.HasPrefix(name, "-") {
+			s := &StructPto{
+				Name:     name,
+				Required: required,
+				Desc:     description,
+				IsArray:  isArray,
+				Fields:   make([]FieldPto, 0),
+			}
+			operation.SP = s
+			operation.LastPto = s
+			return nil
 		}
-		param.Schema.Ref = spec.Ref{
-			Ref: jsonreference.MustCreateRef("#/definitions/" + schemaType),
+
+		// +++中间+++
+		if strings.HasPrefix(name, "-") {
+			level := strings.Count(name, "-")
+			f := &FieldPto{
+				Name:     name,
+				Type:     schemaType,
+				Level:    level,
+				Required: required,
+				Desc:     description,
+				IsArray:  isArray,
+				Pre:      operation.LastPto,
+				Ex:       GetAllExtraction(commentLine),
+			}
+
+			if operation.LastPto != nil {
+				if level == operation.LastPto.GetLevel() {
+					// 同级别加Pre
+					operation.LastPto.AddPre(f)
+				} else {
+					// 不同级别加本身
+					operation.LastPto.Add(f)
+				}
+			}
+			operation.LastPto = f
+			return nil
 		}
-	case "form":
-		param = createParameter(paramType, description, name, TransToValidSchemeType(schemaType), required)
-	default:
-		return fmt.Errorf("%s is not supported paramType", paramType)
+	} else {
+		// +++结束+++
+		if operation.SP != nil {
+			// 清空SP ，注册Struct
+			// 引用这个虚拟的Model
+			expr, err := goparser.ParseExpr(operation.SP.Map2GoFile())
+			if err != nil {
+				return err
+			}
+
+			pkgName := "swagauto"
+			newSchemaType := "Param" + strings.Title(operation.SP.Name)
+			if operation.SP.IsArray {
+				newSchemaType = "array_" + newSchemaType
+			}
+
+			paSp := createParameter("body", operation.SP.Desc, operation.SP.Name, TransToValidSchemeType(newSchemaType), operation.SP.Required)
+			if err := operation.parser.ParseDefinition(pkgName, newSchemaType, &ast.TypeSpec{Type: expr}); err != nil {
+				return nil
+			}
+
+			paSp.Schema.Ref = spec.Ref{
+				Ref: jsonreference.MustCreateRef("#/definitions/" + DelArray(newSchemaType)),
+			}
+			operation.Operation.Parameters = append(operation.Operation.Parameters, paSp)
+			operation.SP = nil
+			operation.LastPto = nil
+		}
+
+		if name == "EndStruct" {
+			return nil
+		}
+
+		// 普通参数
+		switch paramType {
+		case "query", "path", "header":
+			param = createParameter(paramType, description, name, TransToValidSchemeType(schemaType), required)
+		case "body":
+			param = createParameter(paramType, description, name, TransToValidSchemeType(schemaType), required)
+			if err := operation.registerSchemaType(DelArray(schemaType), astFile); err != nil {
+				return err
+			}
+			param.Schema.Ref = spec.Ref{
+				Ref: jsonreference.MustCreateRef("#/definitions/" + DelArray(schemaType)),
+			}
+		case "form":
+			param = createParameter(paramType, description, name, TransToValidSchemeType(schemaType), required)
+		default:
+			return fmt.Errorf("%s is not supported paramType", paramType)
+		}
 	}
 
 	if err := operation.parseAndExtractionParamAttribute(commentLine, schemaType, &param); err != nil {
@@ -268,6 +436,18 @@ var regexAttributes = map[string]*regexp.Regexp{
 	"maxlength": regexp.MustCompile(`(?i)maxlength\(.*\)`),
 	// for format(email)
 	"format": regexp.MustCompile(`(?i)format\(.*\)`),
+}
+
+func GetAllExtraction(commentLine string) string {
+	var result strings.Builder
+	for _, re := range regexAttributes {
+		findResult := re.FindString(commentLine)
+		if findResult != "" {
+			result.WriteString(findResult)
+			result.WriteString("   ")
+		}
+	}
+	return result.String()
 }
 
 func (operation *Operation) parseAndExtractionParamAttribute(commentLine, schemaType string, param *spec.Parameter) error {
@@ -544,52 +724,154 @@ func findTypeDef(importPath, typeName string) (*ast.TypeSpec, error) {
 	return nil, errors.New("type spec not found")
 }
 
-var responsePattern = regexp.MustCompile(`([\d]+)[\s]+([\w\{\}]+)[\s]+([\w\-\.\/]+)[^"]*(.*)?`)
+func (operation *Operation) ParseSingleComment(commentLine string) error {
+	mathches := strings.Fields(commentLine)
 
-// ParseResponseComment parses comment for gived `response` comment string.
-func (operation *Operation) ParseResponseComment(commentLine string, astFile *ast.File) error {
+	if len(mathches) != 3 {
+		return errors.New(" Parse Error : Check you param len in : " + commentLine)
+	}
+
+	refType := mathches[1]
+	desc := mathches[2]
+
+	var response spec.Response
+	response.Description = desc
+	response.Schema = &spec.Schema{
+		SchemaProps: spec.SchemaProps{
+			Type: []string{refType},
+		},
+	}
+
+	if operation.Responses == nil {
+		operation.Responses = &spec.Responses{
+			ResponsesProps: spec.ResponsesProps{
+				StatusCodeResponses: make(map[int]spec.Response),
+			},
+		}
+	}
+
+	operation.Responses.StatusCodeResponses[200] = response
+
+	return nil
+}
+
+func (operation *Operation) ParseFailComment(commentLine string, astFile *ast.File) error {
 	var matches []string
+	matches = strings.Fields(commentLine)
 
-	if matches = responsePattern.FindStringSubmatch(commentLine); len(matches) != 5 {
-		return fmt.Errorf("can not parse response comment \"%s\"", commentLine)
-	}
-
-	response := spec.Response{}
-
-	code, _ := strconv.Atoi(matches[1])
-
-	responseDescription := strings.Trim(matches[4], "\"")
-	if responseDescription == "" {
-		responseDescription = http.StatusText(code)
-	}
-	response.Description = responseDescription
-
-	schemaType := strings.Trim(matches[2], "{}")
-	refType := matches[3]
-
-	if operation.parser != nil { // checking refType has existing in 'TypeDefinitions'
-		if err := operation.registerSchemaType(refType, astFile); err != nil {
+	var sCode, selfCode int
+	var err error
+	var comment string
+	if len(matches) == 3 {
+		sCode, err = strconv.Atoi(matches[1])
+		comment = matches[2]
+		if err != nil {
 			return err
 		}
 	}
 
-	// so we have to know all type in app
-	//TODO: we might omitted schema.type if schemaType equals 'object'
-	response.Schema = &spec.Schema{SchemaProps: spec.SchemaProps{Type: []string{schemaType}}}
+	if len(matches) == 4 {
+		selfCode, err = strconv.Atoi(matches[2])
+		comment = matches[3]
+		if err != nil {
+			return err
+		}
+		_ = selfCode
+	}
 
-	if schemaType == "object" {
-		response.Schema.Ref = spec.Ref{
-			Ref: jsonreference.MustCreateRef("#/definitions/" + refType),
+	response := spec.Response{}
+
+	if comment == "" {
+		response.Description = http.StatusText(sCode)
+	} else {
+		response.Description = "自定状态码：" + "_" + matches[2] + "_" + "  " + comment
+	}
+
+	if operation.Responses == nil {
+		operation.Responses = &spec.Responses{
+			ResponsesProps: spec.ResponsesProps{
+				StatusCodeResponses: make(map[int]spec.Response),
+			},
 		}
 	}
 
-	if schemaType == "array" {
-		refType = TransToValidSchemeType(refType)
-		if IsPrimitiveType(refType) {
+	operation.Responses.StatusCodeResponses[sCode] = response
+
+	return nil
+}
+
+var responsePattern = regexp.MustCompile(`([\d]+)[\s]+([\w\{\}]+)[\s]+([\w\-\.\/]+)[^"]*(.*)?`)
+
+func (operation *Operation) findResponseMatches(matches []string) (name string, schemaType string, require bool, desc string) {
+	if len(matches) < 3 {
+		if len(matches) > 2 {
+			if matches[1] == "-" {
+				return "EndStruct", "", false, ""
+			}
+		}
+		return "", "", false, ""
+	}
+
+	name = matches[1]
+	schemaType = matches[2]
+	desc = matches[len(matches)-1]
+	require = true
+
+	if len(matches) == 5 {
+		require, _ = strconv.ParseBool(matches[3])
+	}
+	return
+}
+
+// ParseResponseComment parses comment for gived `response` comment string.
+func (operation *Operation) ParseResponseComment(commentLine string, astFile *ast.File) error {
+	name, schemaType, required, description := operation.findResponseMatches(strings.Fields(commentLine))
+	if len(name) == 0 {
+		return errors.New(" Parse Error : Check you param len in : " + commentLine)
+	}
+	var response spec.Response
+	response.Description = description
+	// so we have to know all type in app
+	response.Schema = &spec.Schema{
+		SchemaProps: spec.SchemaProps{
+			Type: []string{schemaType},
+		},
+	}
+
+	if name == "{object}" {
+		if err := operation.registerSchemaType(schemaType, astFile); err != nil {
+			return err
+		}
+
+		response.Schema.Required = []string{strconv.FormatBool(required)}
+		response.Schema.Ref = spec.Ref{
+			Ref: jsonreference.MustCreateRef("#/definitions/" + schemaType),
+		}
+
+		if operation.Responses == nil {
+			operation.Responses = &spec.Responses{
+				ResponsesProps: spec.ResponsesProps{
+					StatusCodeResponses: make(map[int]spec.Response),
+				},
+			}
+		}
+
+		operation.Responses.StatusCodeResponses[200] = response
+		return nil
+	}
+
+	if name == "{array}" {
+		if err := operation.registerSchemaType(schemaType, astFile); err != nil {
+			return err
+		}
+		response.Schema.Required = []string{strconv.FormatBool(required)}
+
+		schemaType = TransToValidSchemeType(schemaType)
+		if IsPrimitiveType(schemaType) {
 			response.Schema.Items = &spec.SchemaOrArray{
 				Schema: &spec.Schema{
 					SchemaProps: spec.SchemaProps{
-						Type: spec.StringOrArray{refType},
+						Type: spec.StringOrArray{schemaType},
 					},
 				},
 			}
@@ -597,10 +879,96 @@ func (operation *Operation) ParseResponseComment(commentLine string, astFile *as
 			response.Schema.Items = &spec.SchemaOrArray{
 				Schema: &spec.Schema{
 					SchemaProps: spec.SchemaProps{
-						Ref: spec.Ref{Ref: jsonreference.MustCreateRef("#/definitions/" + refType)},
+						Ref: spec.Ref{Ref: jsonreference.MustCreateRef("#/definitions/" + schemaType)},
 					},
 				},
 			}
+		}
+
+		if operation.Responses == nil {
+			operation.Responses = &spec.Responses{
+				ResponsesProps: spec.ResponsesProps{
+					StatusCodeResponses: make(map[int]spec.Response),
+				},
+			}
+		}
+
+		operation.Responses.StatusCodeResponses[200] = response
+		return nil
+	}
+
+	if strings.HasPrefix(name, "-") || schemaType == "struct" {
+		// Struct 参数
+		isArray := strings.HasPrefix(schemaType, "array")
+		schemaType = DelArray(schemaType)
+
+		// +++开始+++
+		if schemaType == "struct" && !strings.HasPrefix(name, "-") {
+			s := &StructPto{
+				Name:     name,
+				Required: required,
+				Desc:     description,
+				IsArray:  isArray,
+				Fields:   make([]FieldPto, 0),
+			}
+			operation.SP = s
+			operation.LastPto = s
+			return nil
+		}
+
+		// +++中间+++
+		if strings.HasPrefix(name, "-") {
+			level := strings.Count(name, "-")
+			f := &FieldPto{
+				Name:     name,
+				Type:     schemaType,
+				Level:    level,
+				Required: required,
+				Desc:     description,
+				IsArray:  isArray,
+				Pre:      operation.LastPto,
+				Ex:       GetAllExtraction(commentLine),
+			}
+
+			if operation.LastPto != nil {
+				if level == operation.LastPto.GetLevel() {
+					// 同级别加Pre
+					operation.LastPto.AddPre(f)
+				} else {
+					// 不同级别加本身
+					operation.LastPto.Add(f)
+				}
+			}
+			operation.LastPto = f
+			return nil
+		}
+	}
+
+	if name == "EndStruct" {
+		// +++结束+++
+		if operation.SP != nil {
+			// 清空SP ，注册Struct
+			// 引用这个虚拟的Model
+			expr, err := goparser.ParseExpr(operation.SP.Map2GoFile())
+			if err != nil {
+				return err
+			}
+
+			pkgName := "swagauto"
+			newSchemaType := "Response" + strings.Title(operation.SP.Name)
+			if operation.SP.IsArray {
+				newSchemaType = "array_" + newSchemaType
+			}
+
+			if err := operation.parser.ParseDefinition(pkgName, newSchemaType, &ast.TypeSpec{Type: expr}); err != nil {
+				return nil
+			}
+
+			response.Schema.Ref = spec.Ref{
+				Ref: jsonreference.MustCreateRef("#/definitions/" + DelArray(newSchemaType)),
+			}
+			operation.SP = nil
+			operation.LastPto = nil
 		}
 	}
 
@@ -612,8 +980,7 @@ func (operation *Operation) ParseResponseComment(commentLine string, astFile *as
 		}
 	}
 
-	operation.Responses.StatusCodeResponses[code] = response
-
+	operation.Responses.StatusCodeResponses[200] = response
 	return nil
 }
 
@@ -715,8 +1082,6 @@ func (operation *Operation) ParseEmptyResponseOnly(commentLine string) error {
 
 // createParameter returns swagger spec.Parameter for gived  paramType, description, paramName, schemaType, required
 func createParameter(paramType, description, paramName, schemaType string, required bool) spec.Parameter {
-	// //five possible parameter types. 	query, path, body, header, form
-	// schemaType can be . int number string bool struct array_xxx
 	paramProps := spec.ParamProps{
 		Name:        paramName,
 		Description: description,
@@ -727,7 +1092,14 @@ func createParameter(paramType, description, paramName, schemaType string, requi
 	if paramType == "body" {
 		paramProps.Schema = &spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Type: []string{schemaType},
+				Type: []string{"array"},
+				Items: &spec.SchemaOrArray{
+					Schema: &spec.Schema{
+						SchemaProps: spec.SchemaProps{
+							Type: []string{DelArray(schemaType)},
+						},
+					},
+				},
 			},
 		}
 		parameter := spec.Parameter{
@@ -735,6 +1107,22 @@ func createParameter(paramType, description, paramName, schemaType string, requi
 		}
 		return parameter
 	}
+
+	if strings.HasPrefix(schemaType, "array") {
+		parameter := spec.Parameter{
+			ParamProps: paramProps,
+			SimpleSchema: spec.SimpleSchema{
+				Type: "array",
+				Items: &spec.Items{
+					SimpleSchema: spec.SimpleSchema{
+						Type: DelArray(schemaType),
+					},
+				},
+			},
+		}
+		return parameter
+	}
+
 	parameter := spec.Parameter{
 		ParamProps: paramProps,
 		SimpleSchema: spec.SimpleSchema{
@@ -742,4 +1130,9 @@ func createParameter(paramType, description, paramName, schemaType string, requi
 		},
 	}
 	return parameter
+}
+
+// array_string => string
+func DelArray(s string) string {
+	return strings.TrimLeft(s, "array_")
 }

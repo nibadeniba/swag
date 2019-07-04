@@ -8,5 +8,5 @@ import (
 
 func TestFormater_FormatMainFile(t *testing.T) {
 	formater := NewFormater()
-	assert.NoError(t, formater.FormatFile("replacer.go"))
+	assert.NoError(t, formater.FormatFile("parser.go"))
 }
