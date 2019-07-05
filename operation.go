@@ -5,11 +5,13 @@ import (
 	"go/ast"
 	goparser "go/parser"
 	"go/token"
+	"log"
 	"net/http"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
+	"text/template"
 
 	"github.com/go-openapi/jsonreference"
 	"github.com/go-openapi/spec"
@@ -60,9 +62,62 @@ func (self *StructPto) AddPre(pto *FieldPto) {
 	self.Fields = append(self.Fields, *pto)
 }
 
-func (self *StructPto) Map2GoFile() string {
+const reTemplate = `
+	type {{.StructName}} struct{
+		{{range $index, $field := .Fields}}
+			{{$field.Name}} {{$field.Type}}  {{if $field.Ex }} ^{{$field.Ex}}^ {{end}} // {{$field.Desc}}
+		{{end}}
+	}
+`
 
-	return ""
+func (self *StructPto) Map2GoFile(structPrefix string) string {
+	var result strings.Builder
+
+	parsed, err := template.New("level").Parse(reTemplate)
+	if err != nil {
+		return ""
+	}
+
+	type Temp struct {
+		StructName string
+		Fields     []FieldPto
+	}
+
+	var newFields []FieldPto
+	var allFieldDecls []string
+
+	for _, e := range self.Fields {
+		if e.Type == "struct" {
+			result := e.Map2GoStruct(structPrefix)
+			allFieldDecls = append(allFieldDecls, result)
+
+			e.Type = structPrefix + strings.Title(e.Name)
+		}
+
+		if e.IsArray {
+			e.Type = "[]" + e.Type
+		}
+
+		if e.Required {
+			e.Desc = "必有； " + e.Desc
+		}
+
+		newFields = append(newFields, e)
+	}
+
+	err = parsed.Execute(&result, &Temp{
+		StructName: structPrefix + strings.Title(self.Name),
+		Fields:     newFields,
+	})
+	if err != nil {
+		log.Fatalf("execution failed: %s", err)
+	}
+
+	for _, e := range allFieldDecls {
+		result.WriteString(" \n ")
+		result.WriteString(e)
+	}
+	return strings.ReplaceAll(result.String(), "^", "`")
 }
 
 func (self *StructPto) GetLevel() int {
@@ -97,6 +152,58 @@ func (self *FieldPto) AddPre(pto *FieldPto) {
 
 func (self *FieldPto) GetLevel() int {
 	return self.Level
+}
+
+func (self *FieldPto) Map2GoStruct(structPrefix string) string {
+	// 这个Field必须是Struct
+	var result strings.Builder
+
+	parsed, err := template.New("level").Parse(reTemplate)
+	if err != nil {
+		return ""
+	}
+
+	type Temp struct {
+		StructName string
+		Fields     []FieldPto
+	}
+
+	var newFields []FieldPto
+	var allFieldDecls []string
+
+	if self.Type == "struct" {
+		for _, e := range self.Child {
+			if e.Type == "struct" {
+				result := e.Map2GoStruct(structPrefix)
+				allFieldDecls = append(allFieldDecls, result)
+
+				e.Type = structPrefix + strings.Title(e.Name)
+			}
+
+			if e.IsArray {
+				e.Type = "[]" + e.Type
+			}
+
+			if e.Required {
+				e.Desc = "必有； " + e.Desc
+			}
+
+			newFields = append(newFields, e)
+		}
+	}
+
+	err = parsed.Execute(&result, &Temp{
+		StructName: structPrefix + strings.Title(self.Name),
+		Fields:     newFields,
+	})
+	if err != nil {
+		log.Fatalf("execution failed: %s", err)
+	}
+	for _, e := range allFieldDecls {
+		result.WriteString(" \n ")
+		result.WriteString(e)
+	}
+	return strings.ReplaceAll(result.String(), "^", "`")
 }
 
 var mimeTypeAliases = map[string]string{
@@ -324,13 +431,14 @@ func (operation *Operation) ParseParamComment(commentLine string, astFile *ast.F
 		if operation.SP != nil {
 			// 清空SP ，注册Struct
 			// 引用这个虚拟的Model
-			expr, err := goparser.ParseExpr(operation.SP.Map2GoFile())
+			pkgName := "swagauto"
+			newSchemaType := "Param" + strings.Title(operation.SP.Name)
+
+			expr, err := goparser.ParseExpr(operation.SP.Map2GoFile("Param"))
 			if err != nil {
 				return err
 			}
 
-			pkgName := "swagauto"
-			newSchemaType := "Param" + strings.Title(operation.SP.Name)
 			if operation.SP.IsArray {
 				newSchemaType = "array_" + newSchemaType
 			}
@@ -949,13 +1057,14 @@ func (operation *Operation) ParseResponseComment(commentLine string, astFile *as
 		if operation.SP != nil {
 			// 清空SP ，注册Struct
 			// 引用这个虚拟的Model
-			expr, err := goparser.ParseExpr(operation.SP.Map2GoFile())
+			pkgName := "swagauto"
+			newSchemaType := "Response" + strings.Title(operation.SP.Name)
+
+			expr, err := goparser.ParseExpr(operation.SP.Map2GoFile("Response"))
 			if err != nil {
 				return err
 			}
 
-			pkgName := "swagauto"
-			newSchemaType := "Response" + strings.Title(operation.SP.Name)
 			if operation.SP.IsArray {
 				newSchemaType = "array_" + newSchemaType
 			}

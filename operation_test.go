@@ -2,6 +2,7 @@ package swag
 
 import (
 	"encoding/json"
+	"fmt"
 	"go/ast"
 	"testing"
 
@@ -745,4 +746,76 @@ func TestParseDeprecationDescription(t *testing.T) {
 	if !operation.Deprecated {
 		t.Error("Failed to parse @deprecated comment")
 	}
+}
+
+func TestStructPto_Map2GoFile(t *testing.T) {
+	self := &StructPto{
+		Name:     "data",
+		Required: true,
+		Desc:     " ",
+		IsArray:  false,
+		Fields: []FieldPto{
+			{
+				Name:     "name",
+				Required: true,
+				Type:     "string",
+				Desc:     " mei ",
+				IsArray:  false,
+			},
+			{
+				Name:     "tel",
+				Required: true,
+				Type:     "struct",
+				Desc:     "手机号",
+				Ex:       "format(mobile)",
+				IsArray:  false,
+				Child: []FieldPto{
+					{
+						Name:     "mobile",
+						Required: true,
+						Type:     "struct",
+						Desc:     "手机号2",
+						Ex:       "format(mobile)",
+						IsArray:  true,
+						Child: []FieldPto{
+							{
+								Name:     "name",
+								Required: true,
+								Type:     "string",
+								Desc:     " mei ",
+								IsArray:  false,
+							},
+						},
+					},
+				},
+			},
+			{
+				Name:     "addrs",
+				Required: true,
+				Type:     "struct",
+				Desc:     "地址列表",
+				IsArray:  true,
+				Child: []FieldPto{
+					{
+						Name:     "area1",
+						Required: true,
+						Type:     "string",
+						Desc:     "用户的某个地址",
+						Ex:       "format(addr)",
+						IsArray:  false,
+					},
+					{
+						Name:     "area2",
+						Required: false,
+						Type:     "string",
+						Desc:     "用户的另一个地址",
+						Ex:       "format(mobile)",
+						IsArray:  false,
+					},
+				},
+			},
+		},
+	}
+	got := self.Map2GoFile("Param")
+	fmt.Println(got)
 }
