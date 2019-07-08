@@ -10,6 +10,7 @@ import (
 	"github.com/swaggo/swag"
 	"github.com/swaggo/swag/format"
 	"github.com/swaggo/swag/gen"
+	"github.com/swaggo/swag/push"
 	"github.com/swaggo/swag/replace"
 )
 
@@ -146,6 +147,31 @@ func main() {
 				cli.BoolFlag{
 					Name:  "helpInfo, h",
 					Usage: "show more info",
+				},
+			},
+		},
+		{
+			Name:    "push",
+			Aliases: []string{"p"},
+			Usage:   "push doc to docker container ",
+			Action: func(c *cli.Context) error {
+				path := c.String("path")
+				system := c.String("system")
+
+				return push.New().Build(&push.Config{
+					Dir:    path,
+					System: system,
+				})
+			},
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  "path, d",
+					Value: "./docs",
+					Usage: "where path in",
+				},
+				cli.StringFlag{
+					Name:  "system,s",
+					Usage: "漂流、内容或电商，分别推到各自的docker上(cms.makeup|ec.mail|drift.drfit)",
 				},
 			},
 		},
