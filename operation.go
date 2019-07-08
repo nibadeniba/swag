@@ -36,8 +36,9 @@ type Operation struct {
 
 type Pto interface {
 	Add(pto *FieldPto)
-	AddPre(pto *FieldPto)
+	AddParent(pto *FieldPto)
 	GetLevel() int
+	GetParent() Pto
 }
 
 type StructPto struct {
@@ -45,21 +46,25 @@ type StructPto struct {
 	Required bool
 	Desc     string
 	IsArray  bool
-	Fields   []FieldPto
+	Fields   []*FieldPto
 }
 
 func (self *StructPto) Add(pto *FieldPto) {
 	if self.Fields == nil {
-		self.Fields = make([]FieldPto, 0)
+		self.Fields = make([]*FieldPto, 0)
 	}
-	self.Fields = append(self.Fields, *pto)
+	self.Fields = append(self.Fields, pto)
 }
 
-func (self *StructPto) AddPre(pto *FieldPto) {
+func (self *StructPto) AddParent(pto *FieldPto) {
 	if self.Fields == nil {
-		self.Fields = make([]FieldPto, 0)
+		self.Fields = make([]*FieldPto, 0)
 	}
-	self.Fields = append(self.Fields, *pto)
+	self.Fields = append(self.Fields, pto)
+}
+
+func (self *StructPto) GetParent() Pto {
+	return self
 }
 
 const reTemplate = `
@@ -71,7 +76,10 @@ const reTemplate = `
 `
 
 func (self *StructPto) Map2GoFile(structPrefix string) string {
+	Println("start map file ... ")
 	var result strings.Builder
+	result.WriteString("package swagauto")
+	result.WriteByte('\n')
 
 	parsed, err := template.New("level").Parse(reTemplate)
 	if err != nil {
@@ -91,7 +99,7 @@ func (self *StructPto) Map2GoFile(structPrefix string) string {
 			result := e.Map2GoStruct(structPrefix)
 			allFieldDecls = append(allFieldDecls, result)
 
-			e.Type = structPrefix + strings.Title(e.Name)
+			e.Type = structPrefix + strings.ReplaceAll(strings.Title(e.Name), "-", "")
 		}
 
 		if e.IsArray {
@@ -102,11 +110,13 @@ func (self *StructPto) Map2GoFile(structPrefix string) string {
 			e.Desc = "必有； " + e.Desc
 		}
 
-		newFields = append(newFields, e)
+		e.Name = strings.Title(strings.ReplaceAll(e.Name, "-", ""))
+
+		newFields = append(newFields, *e)
 	}
 
 	err = parsed.Execute(&result, &Temp{
-		StructName: structPrefix + strings.Title(self.Name),
+		StructName: structPrefix + strings.ReplaceAll(strings.Title(self.Name), "-", ""),
 		Fields:     newFields,
 	})
 	if err != nil {
@@ -131,27 +141,31 @@ type FieldPto struct {
 	Type     string
 	Desc     string
 	Ex       string
-	Pre      Pto
+	Parent   Pto
 
 	IsArray bool
-	Child   []FieldPto
+	Child   []*FieldPto
 }
 
 func (self *FieldPto) Add(pto *FieldPto) {
 	if self.Child == nil {
-		self.Child = make([]FieldPto, 0)
+		self.Child = make([]*FieldPto, 0)
 	}
-	self.Child = append(self.Child, *pto)
+	self.Child = append(self.Child, pto)
 }
 
-func (self *FieldPto) AddPre(pto *FieldPto) {
-	if self.Pre != nil {
-		self.Pre.Add(pto)
+func (self *FieldPto) AddParent(pto *FieldPto) {
+	if self.Parent != nil {
+		self.Parent.Add(pto)
 	}
 }
 
 func (self *FieldPto) GetLevel() int {
 	return self.Level
+}
+
+func (self *FieldPto) GetParent() Pto {
+	return self.Parent
 }
 
 func (self *FieldPto) Map2GoStruct(structPrefix string) string {
@@ -188,12 +202,14 @@ func (self *FieldPto) Map2GoStruct(structPrefix string) string {
 				e.Desc = "必有； " + e.Desc
 			}
 
-			newFields = append(newFields, e)
+			e.Name = strings.Title(strings.ReplaceAll(e.Name, "-", ""))
+
+			newFields = append(newFields, *e)
 		}
 	}
 
 	err = parsed.Execute(&result, &Temp{
-		StructName: structPrefix + strings.Title(self.Name),
+		StructName: structPrefix + strings.ReplaceAll(strings.Title(self.Name), "-", ""),
 		Fields:     newFields,
 	})
 	if err != nil {
@@ -279,6 +295,9 @@ func (operation *Operation) ParseComment(comment string, astFile *ast.File) erro
 			return err
 		}
 	case "@single":
+		if err := operation.ParseSingleComment(lineRemainder); err != nil {
+			return err
+		}
 	case "@header":
 		if err := operation.ParseResponseHeaderComment(lineRemainder, astFile); err != nil {
 			return err
@@ -310,54 +329,52 @@ func (operation *Operation) findMatches(matches []string) (name string, schemaTy
 		defaultParam = "body"
 	}
 
-	if len(matches) < 4 {
-		if len(matches) > 2 {
-			if matches[1] == "-" {
+	if len(matches) < 3 {
+		if len(matches) == 1 {
+			if matches[0] == "-" {
 				return "EndStruct", "", "", false, ""
 			}
 		}
 		return "", "", "", false, ""
 	}
 
-	name = matches[1]
-	schemaType = matches[2]
+	name = matches[0]
+	schemaType = matches[1]
 
 	switch len(matches) {
-	case 4:
+	case 3:
 		// @Param   --name       string   筛选姓名
 		paramType = defaultParam
 		require = true
-		desc = matches[3]
+		desc = matches[2]
 		return
-	case 5, 6:
+	case 4:
 		desc = matches[len(matches)-1]
 
-		if has(inT, matches[3]) {
-			paramType = matches[3]
-		} else if matches[3] == "true" || matches[3] == "false" ||
-			matches[3] == "T" || matches[3] == "F" {
+		if has(inT, matches[2]) {
+			paramType = matches[2]
+		} else if matches[2] == "true" || matches[2] == "false" ||
+			matches[2] == "T" || matches[2] == "F" {
 			paramType = defaultParam
-			require, _ = strconv.ParseBool(matches[3])
+			require, _ = strconv.ParseBool(matches[2])
 		} else {
 			paramType = defaultParam
 			require = true
 		}
+	case 5:
+		desc = matches[len(matches)-1]
+		paramType = matches[2]
 
-		if len(matches) == 6 {
-			if matches[4] == "true" || matches[4] == "false" ||
-				matches[4] == "T" || matches[4] == "F" {
-				paramType = defaultParam
-				require, _ = strconv.ParseBool(matches[4])
-			} else {
-				paramType = defaultParam
-				require = true
-			}
+		if matches[3] == "true" || matches[3] == "false" ||
+			matches[3] == "T" || matches[3] == "F" {
+			require, _ = strconv.ParseBool(matches[3])
+		} else {
+			require = true
 		}
 	}
 	if paramType == "form" {
 		paramType = "formData"
 	}
-
 	return
 }
 
@@ -375,82 +392,27 @@ func has(s []string, key string) bool {
 //              [param name]    [paramType]   [data type]     [is mandatory?]    [Comment]               [attribute(optional)]
 // Also: @Param   some_id          int       (default:query)   (default:true)    "Some ID"
 func (operation *Operation) ParseParamComment(commentLine string, astFile *ast.File) error {
-	name, schemaType, paramType, required, description := operation.findMatches(strings.Fields(commentLine))
+	Println(" start parse ... ", commentLine)
+
+	name, schemaType, paramType, required, description := operation.findMatches(regexp.MustCompile(`\s{3,}`).Split(commentLine, -1))
 	if len(name) == 0 {
 		return errors.New(" Parse Error : Check you param len in : " + commentLine)
 	}
 	var param spec.Parameter
 
 	if strings.HasPrefix(name, "-") || schemaType == "struct" {
-		// Struct 参数
-		isArray := strings.HasPrefix(schemaType, "array")
-		schemaType = DelArray(schemaType)
-
-		// +++开始+++
-		if schemaType == "struct" && !strings.HasPrefix(name, "-") {
-			s := &StructPto{
-				Name:     name,
-				Required: required,
-				Desc:     description,
-				IsArray:  isArray,
-				Fields:   make([]FieldPto, 0),
-			}
-			operation.SP = s
-			operation.LastPto = s
-			return nil
-		}
-
-		// +++中间+++
-		if strings.HasPrefix(name, "-") {
-			level := strings.Count(name, "-")
-			f := &FieldPto{
-				Name:     name,
-				Type:     schemaType,
-				Level:    level,
-				Required: required,
-				Desc:     description,
-				IsArray:  isArray,
-				Pre:      operation.LastPto,
-				Ex:       GetAllExtraction(commentLine),
-			}
-
-			if operation.LastPto != nil {
-				if level == operation.LastPto.GetLevel() {
-					// 同级别加Pre
-					operation.LastPto.AddPre(f)
-				} else {
-					// 不同级别加本身
-					operation.LastPto.Add(f)
-				}
-			}
-			operation.LastPto = f
-			return nil
-		}
+		return operation.ParseStruct(schemaType, name, required, description, commentLine)
 	} else {
 		// +++结束+++
 		if operation.SP != nil {
-			// 清空SP ，注册Struct
-			// 引用这个虚拟的Model
-			pkgName := "swagauto"
-			newSchemaType := "Param" + strings.Title(operation.SP.Name)
+			structPrefix := "Param"
+			typeName := structPrefix + strings.Title(operation.SP.Name)
 
-			expr, err := goparser.ParseExpr(operation.SP.Map2GoFile("Param"))
-			if err != nil {
+			if err := operation.EndTheStruct(structPrefix); err != nil {
 				return err
 			}
 
-			if operation.SP.IsArray {
-				newSchemaType = "array_" + newSchemaType
-			}
-
-			paSp := createParameter("body", operation.SP.Desc, operation.SP.Name, TransToValidSchemeType(newSchemaType), operation.SP.Required)
-			if err := operation.parser.ParseDefinition(pkgName, newSchemaType, &ast.TypeSpec{Type: expr}); err != nil {
-				return nil
-			}
-
-			paSp.Schema.Ref = spec.Ref{
-				Ref: jsonreference.MustCreateRef("#/definitions/" + DelArray(newSchemaType)),
-			}
+			paSp := createParameter("body", operation.SP.Desc, operation.SP.Name, TransToValidSchemeType(typeName), operation.SP.Required)
 			operation.Operation.Parameters = append(operation.Operation.Parameters, paSp)
 			operation.SP = nil
 			operation.LastPto = nil
@@ -462,17 +424,15 @@ func (operation *Operation) ParseParamComment(commentLine string, astFile *ast.F
 
 		// 普通参数
 		switch paramType {
-		case "query", "path", "header":
-			param = createParameter(paramType, description, name, TransToValidSchemeType(schemaType), required)
-		case "body":
-			param = createParameter(paramType, description, name, TransToValidSchemeType(schemaType), required)
-			if err := operation.registerSchemaType(DelArray(schemaType), astFile); err != nil {
-				return err
+		case "query", "path", "header", "form", "body":
+			if paramType == "body" {
+				if strings.Contains(schemaType, ".") {
+					// 引用注册
+					if err := operation.registerSchemaType(DelArray(schemaType), astFile); err != nil {
+						return err
+					}
+				}
 			}
-			param.Schema.Ref = spec.Ref{
-				Ref: jsonreference.MustCreateRef("#/definitions/" + DelArray(schemaType)),
-			}
-		case "form":
 			param = createParameter(paramType, description, name, TransToValidSchemeType(schemaType), required)
 		default:
 			return fmt.Errorf("%s is not supported paramType", paramType)
@@ -833,14 +793,14 @@ func findTypeDef(importPath, typeName string) (*ast.TypeSpec, error) {
 }
 
 func (operation *Operation) ParseSingleComment(commentLine string) error {
-	mathches := strings.Fields(commentLine)
+	mathches := regexp.MustCompile(`\s{3,}`).Split(commentLine, -1)
 
-	if len(mathches) != 3 {
+	if len(mathches) != 2 {
 		return errors.New(" Parse Error : Check you param len in : " + commentLine)
 	}
 
-	refType := mathches[1]
-	desc := mathches[2]
+	refType := mathches[0]
+	desc := mathches[1]
 
 	var response spec.Response
 	response.Description = desc
@@ -865,25 +825,31 @@ func (operation *Operation) ParseSingleComment(commentLine string) error {
 
 func (operation *Operation) ParseFailComment(commentLine string, astFile *ast.File) error {
 	var matches []string
-	matches = strings.Fields(commentLine)
+	matches = regexp.MustCompile(`\s{3,}`).Split(commentLine, -1)
 
 	var sCode, selfCode int
 	var err error
 	var comment string
-	if len(matches) == 3 {
-		sCode, err = strconv.Atoi(matches[1])
-		comment = matches[2]
+	if len(matches) == 2 {
+		sCode, err = strconv.Atoi(matches[0])
+		comment = matches[1]
 		if err != nil {
 			return err
 		}
 	}
 
-	if len(matches) == 4 {
-		selfCode, err = strconv.Atoi(matches[2])
-		comment = matches[3]
+	if len(matches) == 3 {
+		sCode, err = strconv.Atoi(matches[0])
 		if err != nil {
 			return err
 		}
+		m1 := strings.TrimLeft(matches[1], "[")
+		m1 = strings.TrimRight(m1, "]")
+		selfCode, err = strconv.Atoi(m1)
+		if err != nil {
+			return err
+		}
+		comment = matches[2]
 		_ = selfCode
 	}
 
@@ -892,7 +858,11 @@ func (operation *Operation) ParseFailComment(commentLine string, astFile *ast.Fi
 	if comment == "" {
 		response.Description = http.StatusText(sCode)
 	} else {
-		response.Description = "自定状态码：" + "_" + matches[2] + "_" + "  " + comment
+		if selfCode != 0 {
+			response.Description = "自定状态码：" + "_" + strconv.Itoa(selfCode) + "_" + "  " + comment
+		} else {
+			response.Description = comment
+		}
 	}
 
 	if operation.Responses == nil {
@@ -911,29 +881,29 @@ func (operation *Operation) ParseFailComment(commentLine string, astFile *ast.Fi
 var responsePattern = regexp.MustCompile(`([\d]+)[\s]+([\w\{\}]+)[\s]+([\w\-\.\/]+)[^"]*(.*)?`)
 
 func (operation *Operation) findResponseMatches(matches []string) (name string, schemaType string, require bool, desc string) {
-	if len(matches) < 3 {
-		if len(matches) > 2 {
-			if matches[1] == "-" {
+	if len(matches) < 2 {
+		if len(matches) == 1 {
+			if matches[0] == "-" {
 				return "EndStruct", "", false, ""
 			}
 		}
 		return "", "", false, ""
 	}
 
-	name = matches[1]
-	schemaType = matches[2]
+	name = matches[0]
+	schemaType = matches[1]
 	desc = matches[len(matches)-1]
 	require = true
 
-	if len(matches) == 5 {
-		require, _ = strconv.ParseBool(matches[3])
+	if len(matches) == 4 {
+		require, _ = strconv.ParseBool(matches[2])
 	}
 	return
 }
 
 // ParseResponseComment parses comment for gived `response` comment string.
 func (operation *Operation) ParseResponseComment(commentLine string, astFile *ast.File) error {
-	name, schemaType, required, description := operation.findResponseMatches(strings.Fields(commentLine))
+	name, schemaType, required, description := operation.findResponseMatches(regexp.MustCompile(`\s{3,}`).Split(commentLine, -1))
 	if len(name) == 0 {
 		return errors.New(" Parse Error : Check you param len in : " + commentLine)
 	}
@@ -1006,79 +976,21 @@ func (operation *Operation) ParseResponseComment(commentLine string, astFile *as
 	}
 
 	if strings.HasPrefix(name, "-") || schemaType == "struct" {
-		// Struct 参数
-		isArray := strings.HasPrefix(schemaType, "array")
-		schemaType = DelArray(schemaType)
-
-		// +++开始+++
-		if schemaType == "struct" && !strings.HasPrefix(name, "-") {
-			s := &StructPto{
-				Name:     name,
-				Required: required,
-				Desc:     description,
-				IsArray:  isArray,
-				Fields:   make([]FieldPto, 0),
-			}
-			operation.SP = s
-			operation.LastPto = s
-			return nil
-		}
-
-		// +++中间+++
-		if strings.HasPrefix(name, "-") {
-			level := strings.Count(name, "-")
-			f := &FieldPto{
-				Name:     name,
-				Type:     schemaType,
-				Level:    level,
-				Required: required,
-				Desc:     description,
-				IsArray:  isArray,
-				Pre:      operation.LastPto,
-				Ex:       GetAllExtraction(commentLine),
-			}
-
-			if operation.LastPto != nil {
-				if level == operation.LastPto.GetLevel() {
-					// 同级别加Pre
-					operation.LastPto.AddPre(f)
-				} else {
-					// 不同级别加本身
-					operation.LastPto.Add(f)
-				}
-			}
-			operation.LastPto = f
-			return nil
-		}
+		return operation.ParseStruct(schemaType, name, required, description, commentLine)
 	}
 
 	if name == "EndStruct" {
 		// +++结束+++
-		if operation.SP != nil {
-			// 清空SP ，注册Struct
-			// 引用这个虚拟的Model
-			pkgName := "swagauto"
-			newSchemaType := "Response" + strings.Title(operation.SP.Name)
-
-			expr, err := goparser.ParseExpr(operation.SP.Map2GoFile("Response"))
-			if err != nil {
-				return err
-			}
-
-			if operation.SP.IsArray {
-				newSchemaType = "array_" + newSchemaType
-			}
-
-			if err := operation.parser.ParseDefinition(pkgName, newSchemaType, &ast.TypeSpec{Type: expr}); err != nil {
-				return nil
-			}
-
-			response.Schema.Ref = spec.Ref{
-				Ref: jsonreference.MustCreateRef("#/definitions/" + DelArray(newSchemaType)),
-			}
-			operation.SP = nil
-			operation.LastPto = nil
+		structPrefix := "Response"
+		if err := operation.EndTheStruct(structPrefix); err != nil {
+			return err
 		}
+
+		response.Schema.Ref = spec.Ref{
+			Ref: jsonreference.MustCreateRef("#/definitions/" + "swagauto" + DelArray(structPrefix+strings.Title(operation.SP.Name))),
+		}
+		operation.SP = nil
+		operation.LastPto = nil
 	}
 
 	if operation.Responses == nil {
@@ -1090,6 +1002,104 @@ func (operation *Operation) ParseResponseComment(commentLine string, astFile *as
 	}
 
 	operation.Responses.StatusCodeResponses[200] = response
+	return nil
+}
+
+func (operation *Operation) ParseStruct(schemaType string, name string, required bool, description string, commentLine string) error {
+	// Struct 参数
+	isArray := strings.HasPrefix(schemaType, "array")
+	schemaType = DelArray(schemaType)
+
+	// +++开始+++
+	if schemaType == "struct" && !strings.HasPrefix(name, "-") {
+		s := &StructPto{
+			Name:     name,
+			Required: required,
+			Desc:     description,
+			IsArray:  isArray,
+			Fields:   make([]*FieldPto, 0),
+		}
+		operation.SP = s
+		operation.LastPto = s
+		return nil
+	}
+
+	// +++中间+++
+	if strings.HasPrefix(name, "-") {
+		level := strings.Count(name, "-")
+		f := &FieldPto{
+			Name:     name,
+			Type:     schemaType,
+			Level:    level,
+			Required: required,
+			Desc:     description,
+			IsArray:  isArray,
+			Parent:   operation.LastPto,
+			Ex:       GetAllExtraction(commentLine),
+		}
+
+		if operation.LastPto != nil {
+			if level > operation.LastPto.GetLevel() {
+				// 级数变深
+				// 加在上一级的本身
+				// 本级的父母是它上级
+				f.Parent = operation.LastPto
+				operation.LastPto.Add(f)
+			} else if level == operation.LastPto.GetLevel() {
+				// 级数平级
+				// 加在上一级的父母上
+				// 本级的父母是它上级的父母
+				f.Parent = operation.LastPto.GetParent()
+				operation.LastPto.AddParent(f)
+			} else if level < operation.LastPto.GetLevel() {
+				// 级数变小
+				// 加在上一级的父母的父母
+				// 本级的父母是它上级的父母的父母
+				f.Parent = operation.LastPto.GetParent().GetParent()
+				operation.LastPto.GetParent().AddParent(f)
+			}
+		}
+		operation.LastPto = f
+	}
+	return nil
+}
+
+func (operation *Operation) EndTheStruct(structPrefix string) error {
+	if operation.SP != nil {
+		// 清空SP ，注册Struct
+		// 引用这个虚拟的Model
+		pkgName := "swagauto"
+		typeName := structPrefix + strings.Title(operation.SP.Name)
+
+		fset := token.NewFileSet()
+		gFile := operation.SP.Map2GoFile(structPrefix)
+
+		Println(gFile)
+		astFile, err := goparser.ParseFile(fset, "", gFile, goparser.ParseComments)
+		if err != nil {
+			return err
+		}
+
+		for _, astDeclaration := range astFile.Decls {
+			if generalDeclaration, ok := astDeclaration.(*ast.GenDecl); ok && generalDeclaration.Tok == token.TYPE {
+				for _, astSpec := range generalDeclaration.Specs {
+					if typeSpec, ok := astSpec.(*ast.TypeSpec); ok {
+						if _, ok := operation.parser.TypeDefinitions[pkgName]; !ok {
+							operation.parser.TypeDefinitions[pkgName] = make(map[string]*ast.TypeSpec)
+						}
+
+						Printf(" -- registerTempType -- %s", pkgName+"."+typeSpec.Name.String())
+						operation.parser.TypeDefinitions[pkgName][typeSpec.Name.String()] = typeSpec
+						operation.parser.registerTypes[pkgName+"."+typeSpec.Name.String()] = typeSpec
+					}
+				}
+			}
+		}
+
+		if operation.SP.IsArray {
+			typeName = "array_" + typeName
+		}
+	}
 	return nil
 }
 
@@ -1198,40 +1208,71 @@ func createParameter(paramType, description, paramName, schemaType string, requi
 		In:          paramType,
 	}
 
-	if paramType == "body" {
-		paramProps.Schema = &spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Type: []string{"array"},
-				Items: &spec.SchemaOrArray{
-					Schema: &spec.Schema{
-						SchemaProps: spec.SchemaProps{
-							Type: []string{DelArray(schemaType)},
+	if strings.HasPrefix(schemaType, "array") {
+		// 数组型
+		if schemaType == "struct" || paramType == "body" {
+			// 引用型
+			paramProps.Schema = &spec.Schema{
+				SchemaProps: spec.SchemaProps{
+					Type: []string{"array"},
+					Items: &spec.SchemaOrArray{
+						Schema: &spec.Schema{
+							SchemaProps: spec.SchemaProps{
+								Ref: spec.Ref{
+									Ref: jsonreference.MustCreateRef("#/definitions/" + "swagauto." + schemaType),
+								},
+							},
 						},
 					},
 				},
-			},
-		}
-		parameter := spec.Parameter{
-			ParamProps: paramProps,
-		}
-		return parameter
-	}
-
-	if strings.HasPrefix(schemaType, "array") {
-		parameter := spec.Parameter{
-			ParamProps: paramProps,
-			SimpleSchema: spec.SimpleSchema{
-				Type: "array",
-				Items: &spec.Items{
-					SimpleSchema: spec.SimpleSchema{
-						Type: DelArray(schemaType),
+			}
+			parameter := spec.Parameter{
+				ParamProps: paramProps,
+			}
+			return parameter
+		} else {
+			parameter := spec.Parameter{
+				ParamProps: paramProps,
+				SimpleSchema: spec.SimpleSchema{
+					Type: "array",
+					Items: &spec.Items{
+						SimpleSchema: spec.SimpleSchema{
+							Type: DelArray(schemaType),
+						},
 					},
 				},
-			},
+			}
+			return parameter
 		}
-		return parameter
+	} else {
+		// 普通型
+		if schemaType == "struct" || paramType == "body" {
+			// 引用型
+			paramProps.Schema = &spec.Schema{
+				SchemaProps: spec.SchemaProps{
+					Ref: spec.Ref{
+						Ref: jsonreference.MustCreateRef("#/definitions/" + "swagauto." + schemaType),
+					},
+				},
+			}
+
+			parameter := spec.Parameter{
+				ParamProps: paramProps,
+			}
+			return parameter
+		} else {
+			// 非引用型
+			parameter := spec.Parameter{
+				ParamProps: paramProps,
+				SimpleSchema: spec.SimpleSchema{
+					Type: schemaType,
+				},
+			}
+			return parameter
+		}
 	}
 
+	// 默认
 	parameter := spec.Parameter{
 		ParamProps: paramProps,
 		SimpleSchema: spec.SimpleSchema{

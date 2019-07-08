@@ -145,6 +145,7 @@ func (parser *Parser) ParseAPI(searchDir string, mainAPIFile string) error {
 	}
 
 	// 生成 接口 文档
+	Println(" start parse route ...")
 	for fileName, astFile := range parser.files {
 		if parser.ParseDaddyLab {
 			if err := parser.ParseForDaddyLab(fileName, astFile); err != nil {
@@ -158,6 +159,7 @@ func (parser *Parser) ParseAPI(searchDir string, mainAPIFile string) error {
 	}
 
 	// 生成 Beans 文档
+	Println(" start parse Beans ...")
 	if err := parser.parseDefinitions(); err != nil {
 		fmt.Println("error:", err)
 		return err
@@ -964,8 +966,14 @@ func (parser *Parser) parseStruct(pkgName string, field *ast.Field) (map[string]
 			SchemaProps: spec.SchemaProps{
 				Type:        []string{"object"}, // to avoid swagger validation error
 				Description: desc,
-				Ref: spec.Ref{
-					Ref: jsonreference.MustCreateRef("#/definitions/" + pkgName + "." + structField.schemaType),
+				AdditionalProperties: &spec.SchemaOrBool{
+					Schema: &spec.Schema{
+						SchemaProps: spec.SchemaProps{
+							Ref: spec.Ref{
+								Ref: jsonreference.MustCreateRef("#/definitions/" + pkgName + "." + structField.schemaType),
+							},
+						},
+					},
 				},
 			},
 		}
