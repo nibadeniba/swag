@@ -145,7 +145,7 @@ func main() {
 					Usage: "Directory you want to parse",
 				},
 				cli.BoolFlag{
-					Name:  "helpInfo, h",
+					Name:  "helpInfo, i",
 					Usage: "show more info",
 				},
 			},
@@ -170,7 +170,7 @@ func main() {
 					Usage: "where path in",
 				},
 				cli.StringFlag{
-					Name:  "system,s",
+					Name:  "system, s",
 					Usage: "漂流、内容或电商，分别推到各自的docker上(cms.makeup|ec.mail|drift.drfit)",
 				},
 			},

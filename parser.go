@@ -330,9 +330,9 @@ func (parser *Parser) ParseGeneralAPIInfo(mainAPIFile string) error {
 			for i := 0; i < len(comments); i++ {
 				attribute := strings.ToLower(strings.Split(comments[i], " ")[0])
 				switch attribute {
-				case "@securityDef.basic":
+				case "@securitydef.basic":
 					securityMap[strings.TrimSpace(comments[i][len(attribute):])] = spec.BasicAuth()
-				case "@securityDef.apikey":
+				case "@securitydef.apikey":
 					attrMap := map[string]string{}
 					for _, v := range comments[i+1:] {
 						securityAttr := strings.ToLower(strings.Split(v, " ")[0])
@@ -348,7 +348,7 @@ func (parser *Parser) ParseGeneralAPIInfo(mainAPIFile string) error {
 						return errors.New("@securityDef.apikey is @name and @in required")
 					}
 					securityMap[strings.TrimSpace(comments[i][len(attribute):])] = spec.APIKeyAuth(attrMap["@name"], attrMap["@in"])
-				case "@securityDef.oauth2.application":
+				case "@securitydef.oauth2.application":
 					attrMap := map[string]string{}
 					scopes := map[string]string{}
 					for _, v := range comments[i+1:] {
@@ -381,7 +381,7 @@ func (parser *Parser) ParseGeneralAPIInfo(mainAPIFile string) error {
 						securityScheme.AddScope(scope, description)
 					}
 					securityMap[strings.TrimSpace(comments[i][len(attribute):])] = securityScheme
-				case "@securityDef.oauth2.implicit":
+				case "@securitydef.oauth2.implicit":
 					attrMap := map[string]string{}
 					scopes := map[string]string{}
 					for _, v := range comments[i+1:] {
@@ -414,7 +414,7 @@ func (parser *Parser) ParseGeneralAPIInfo(mainAPIFile string) error {
 						securityScheme.AddScope(scope, description)
 					}
 					securityMap[strings.TrimSpace(comments[i][len(attribute):])] = securityScheme
-				case "@securityDef.oauth2.password":
+				case "@securitydef.oauth2.password":
 					attrMap := map[string]string{}
 					scopes := map[string]string{}
 					for _, v := range comments[i+1:] {
@@ -447,7 +447,7 @@ func (parser *Parser) ParseGeneralAPIInfo(mainAPIFile string) error {
 						securityScheme.AddScope(scope, description)
 					}
 					securityMap[strings.TrimSpace(comments[i][len(attribute):])] = securityScheme
-				case "@securityDef.oauth2.accesscode":
+				case "@securitydef.oauth2.accesscode":
 					attrMap := map[string]string{}
 					scopes := map[string]string{}
 					for _, v := range comments[i+1:] {
@@ -1113,6 +1113,12 @@ func (parser *Parser) parseAnonymousField(pkgName string, field *ast.Field) (map
 			Printf("Composite field type of '%T' is unhandle by parser. Skipping", ftype)
 			return properties, []string{}, nil
 		}
+	case *ast.SelectorExpr:
+		var packageName string
+		if ftypeX, ok := ftype.X.(*ast.Ident); ok {
+			packageName = ftypeX.Name
+		}
+		fullTypeName = fmt.Sprintf("%s.%s", packageName, ftype.Sel.Name)
 	default:
 		Printf("Field type of '%T' is unsupported. Skipping", ftype)
 		return properties, []string{}, nil

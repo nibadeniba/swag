@@ -47,7 +47,7 @@ func (f *Push) Build(config *Config) error {
 	path := system + "_doc"
 	println(" 正在上传文件 " + module)
 
-	cmd := exec.Command("sshpass", "-p", "DaddyLab520", "scp", config.Dir+"/swagger.json",
+	cmd := exec.Command("scp", config.Dir+"/swagger.json",
 		"root@192.168.4.31:/root/"+path+"/"+module+".json")
 	var out bytes.Buffer
 	var stderr bytes.Buffer
@@ -114,7 +114,7 @@ func (f *Push) Build(config *Config) error {
 
 	println(" 正在上传Group文件 " + gFile.Name())
 
-	cmd = exec.Command("sshpass", "-p", "DaddyLab520", "scp",
+	cmd = exec.Command("scp",
 		gFile.Name(),
 		"root@192.168.4.31:/root/"+path+"/"+"group.json")
 	cmd.Stdout = &out

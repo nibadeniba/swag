@@ -111,7 +111,6 @@ func (self *StructPto) Map2GoFile(structPrefix string) string {
 		}
 
 		e.Name = strings.Title(strings.ReplaceAll(e.Name, "-", ""))
-
 		newFields = append(newFields, *e)
 	}
 
@@ -363,12 +362,18 @@ func (operation *Operation) findMatches(matches []string) (name string, schemaTy
 		}
 	case 5:
 		desc = matches[len(matches)-1]
-		paramType = matches[2]
 
-		if matches[3] == "true" || matches[3] == "false" ||
+		if has(inT, matches[2]) {
+			paramType = matches[2]
+		} else if matches[2] == "true" || matches[2] == "false" ||
+			matches[2] == "T" || matches[2] == "F" {
+			paramType = defaultParam
+			require, _ = strconv.ParseBool(matches[2])
+		} else if matches[3] == "true" || matches[3] == "false" ||
 			matches[3] == "T" || matches[3] == "F" {
 			require, _ = strconv.ParseBool(matches[3])
 		} else {
+			paramType = defaultParam
 			require = true
 		}
 	}
@@ -400,7 +405,7 @@ func (operation *Operation) ParseParamComment(commentLine string, astFile *ast.F
 	}
 	var param spec.Parameter
 
-	if strings.HasPrefix(name, "-") || schemaType == "struct" {
+	if strings.HasPrefix(name, "-") || schemaType == "struct" || schemaType == "array_struct" {
 		return operation.ParseStruct(schemaType, name, required, description, commentLine)
 	} else {
 		// +++结束+++
@@ -903,6 +908,7 @@ func (operation *Operation) findResponseMatches(matches []string) (name string, 
 
 // ParseResponseComment parses comment for gived `response` comment string.
 func (operation *Operation) ParseResponseComment(commentLine string, astFile *ast.File) error {
+	Println(" start parse ... ", commentLine)
 	name, schemaType, required, description := operation.findResponseMatches(regexp.MustCompile(`\s{3,}`).Split(commentLine, -1))
 	if len(name) == 0 {
 		return errors.New(" Parse Error : Check you param len in : " + commentLine)
@@ -922,6 +928,7 @@ func (operation *Operation) ParseResponseComment(commentLine string, astFile *as
 		}
 
 		response.Schema.Required = []string{strconv.FormatBool(required)}
+		response.Schema.Type = []string{"object"}
 		response.Schema.Ref = spec.Ref{
 			Ref: jsonreference.MustCreateRef("#/definitions/" + schemaType),
 		}
@@ -943,6 +950,7 @@ func (operation *Operation) ParseResponseComment(commentLine string, astFile *as
 			return err
 		}
 		response.Schema.Required = []string{strconv.FormatBool(required)}
+		response.Schema.Type = []string{"array"}
 
 		schemaType = TransToValidSchemeType(schemaType)
 		if IsPrimitiveType(schemaType) {
@@ -975,7 +983,7 @@ func (operation *Operation) ParseResponseComment(commentLine string, astFile *as
 		return nil
 	}
 
-	if strings.HasPrefix(name, "-") || schemaType == "struct" {
+	if strings.HasPrefix(name, "-") || schemaType == "struct" || schemaType == "array_struct" {
 		return operation.ParseStruct(schemaType, name, required, description, commentLine)
 	}
 
@@ -986,9 +994,27 @@ func (operation *Operation) ParseResponseComment(commentLine string, astFile *as
 			return err
 		}
 
-		response.Schema.Ref = spec.Ref{
-			Ref: jsonreference.MustCreateRef("#/definitions/" + "swagauto" + DelArray(structPrefix+strings.Title(operation.SP.Name))),
+		response.Description = operation.SP.Desc
+
+		response.Schema.Required = []string{strconv.FormatBool(operation.SP.Required)}
+		if operation.SP.IsArray {
+			response.Schema.Type = []string{"array"}
+
+			response.Schema.Items = &spec.SchemaOrArray{
+				Schema: &spec.Schema{
+					SchemaProps: spec.SchemaProps{
+						Ref: spec.Ref{Ref: jsonreference.MustCreateRef("#/definitions/" + "swagauto." + structPrefix + strings.Title(operation.SP.Name))},
+					},
+				},
+			}
+		} else {
+			response.Schema.Type = []string{"object"}
+
+			response.Schema.Ref = spec.Ref{
+				Ref: jsonreference.MustCreateRef("#/definitions/" + "swagauto." + structPrefix + strings.Title(operation.SP.Name)),
+			}
 		}
+
 		operation.SP = nil
 		operation.LastPto = nil
 	}
@@ -1074,7 +1100,6 @@ func (operation *Operation) EndTheStruct(structPrefix string) error {
 		fset := token.NewFileSet()
 		gFile := operation.SP.Map2GoFile(structPrefix)
 
-		Println(gFile)
 		astFile, err := goparser.ParseFile(fset, "", gFile, goparser.ParseComments)
 		if err != nil {
 			return err
