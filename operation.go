@@ -417,7 +417,7 @@ func (operation *Operation) ParseParamComment(commentLine string, astFile *ast.F
 				return err
 			}
 
-			paSp := createParameter("body", operation.SP.Desc, operation.SP.Name, TransToValidSchemeType(typeName), operation.SP.Required)
+			paSp := createParameter("body", operation.SP.Desc, operation.SP.Name, "swagauto."+TransToValidSchemeType(typeName), operation.SP.Required)
 			operation.Operation.Parameters = append(operation.Operation.Parameters, paSp)
 			operation.SP = nil
 			operation.LastPto = nil
@@ -811,7 +811,7 @@ func (operation *Operation) ParseSingleComment(commentLine string) error {
 	response.Description = desc
 	response.Schema = &spec.Schema{
 		SchemaProps: spec.SchemaProps{
-			Type: []string{refType},
+			Type: []string{TransToValidSchemeType(refType)},
 		},
 	}
 
@@ -1235,7 +1235,7 @@ func createParameter(paramType, description, paramName, schemaType string, requi
 
 	if strings.HasPrefix(schemaType, "array") {
 		// 数组型
-		if schemaType == "struct" || paramType == "body" {
+		if paramType == "body" {
 			// 引用型
 			paramProps.Schema = &spec.Schema{
 				SchemaProps: spec.SchemaProps{
@@ -1244,7 +1244,7 @@ func createParameter(paramType, description, paramName, schemaType string, requi
 						Schema: &spec.Schema{
 							SchemaProps: spec.SchemaProps{
 								Ref: spec.Ref{
-									Ref: jsonreference.MustCreateRef("#/definitions/" + "swagauto." + schemaType),
+									Ref: jsonreference.MustCreateRef("#/definitions/" + DelArray(schemaType)),
 								},
 							},
 						},
@@ -1271,12 +1271,12 @@ func createParameter(paramType, description, paramName, schemaType string, requi
 		}
 	} else {
 		// 普通型
-		if schemaType == "struct" || paramType == "body" {
+		if paramType == "body" {
 			// 引用型
 			paramProps.Schema = &spec.Schema{
 				SchemaProps: spec.SchemaProps{
 					Ref: spec.Ref{
-						Ref: jsonreference.MustCreateRef("#/definitions/" + "swagauto." + schemaType),
+						Ref: jsonreference.MustCreateRef("#/definitions/" + schemaType),
 					},
 				},
 			}
@@ -1296,15 +1296,6 @@ func createParameter(paramType, description, paramName, schemaType string, requi
 			return parameter
 		}
 	}
-
-	// 默认
-	parameter := spec.Parameter{
-		ParamProps: paramProps,
-		SimpleSchema: spec.SimpleSchema{
-			Type: schemaType,
-		},
-	}
-	return parameter
 }
 
 // array_string => string

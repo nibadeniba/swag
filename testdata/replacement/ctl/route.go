@@ -3,11 +3,10 @@ package ctl
 // ForRoute
 func Route() {
 	//
-	// @title     获取日志列表
+	// @title     日志列表
 	// @desc      接口描述
 	// @Tags      模块
 	// @Router    /simple/url    [GET]
-
 	route.Handler()
 
 	//
@@ -15,7 +14,6 @@ func Route() {
 	// @desc      接口描述
 	// @Tags      模块
 	// @Router    /simple/url    [GET]
-
 	route.Handler()
 }
 
@@ -26,14 +24,12 @@ func Route2() {
 	// @desc      接口描述
 	// @Tags      模块
 	// @Router    /simple/url    [GET]
-
 	route.Handler()
 
 	//
-	// @title     修改日志
+	// @title     更新日志
 	// @desc      接口描述
 	// @Tags      模块
 	// @Router    /simple/url    [GET]
-
 	route.Handler()
 }

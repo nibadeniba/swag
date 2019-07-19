@@ -155,7 +155,7 @@ func main() {
 			Aliases: []string{"p"},
 			Usage:   "push doc to docker container ",
 			Action: func(c *cli.Context) error {
-				path := c.String("path")
+				path := c.String("dir")
 				system := c.String("system")
 
 				return push.New().Build(&push.Config{
@@ -165,13 +165,13 @@ func main() {
 			},
 			Flags: []cli.Flag{
 				cli.StringFlag{
-					Name:  "path, d",
+					Name:  "dir, d",
 					Value: "./docs",
 					Usage: "where path in",
 				},
 				cli.StringFlag{
 					Name:  "system, s",
-					Usage: "漂流、内容或电商，分别推到各自的docker上(cms.makeup|ec.mail|drift.drfit)",
+					Usage: "漂流、内容或电商，分别推到各自的docker上(cms.makeup|ec.mail|drift.drift)",
 				},
 			},
 		},

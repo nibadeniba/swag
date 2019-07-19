@@ -52,20 +52,17 @@ const (
 // @title     {{.Title}}
 // @desc      接口描述
 // @Tags      模块
-// @Router    /simple/url    [GET]
-`
+// @Router    /simple/url    [GET]`
 	generalRouteTemplateD = `
 // @title     {{.Title}}
 // @desc      接口描述
 // @Tags      模块
 // @Router    /simple/url    [GET]
-// @Accept     form
 // @Param      resource_id        int            form   资源ID
 // @Success    {object}           bll.CModel     返回值
 // @Fail       400                [1031]         可定义自己的状态码
 // @Fail       500                也可不定义，只做解释
-// @Security   JWT_Token
-`
+// @Security   JWT_Token`
 )
 
 type Replacer struct {
