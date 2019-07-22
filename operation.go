@@ -348,6 +348,9 @@ func (operation *Operation) findMatches(matches []string) (name string, schemaTy
 		desc = matches[2]
 		return
 	case 4:
+		// @Param   --name       string    T   筛选姓名
+		// @Param   --name       string    body   筛选姓名
+		// @Param   --name       string    default()   筛选姓名
 		desc = matches[len(matches)-1]
 
 		if has(inT, matches[2]) {
@@ -361,6 +364,9 @@ func (operation *Operation) findMatches(matches []string) (name string, schemaTy
 			require = true
 		}
 	case 5:
+		// @Param   --name       string    body   T   筛选姓名
+		// @Param   --name       string    body   default()   筛选姓名
+		// @Param   --name       string    T     default()    筛选姓名
 		desc = matches[len(matches)-1]
 
 		if has(inT, matches[2]) {
@@ -376,6 +382,12 @@ func (operation *Operation) findMatches(matches []string) (name string, schemaTy
 			paramType = defaultParam
 			require = true
 		}
+	case 6:
+		// @Param   --name       string    body   T  default()   筛选姓名
+		desc = matches[len(matches)-1]
+
+		paramType = matches[2]
+		require, _ = strconv.ParseBool(matches[3])
 	}
 	if paramType == "form" {
 		paramType = "formData"
