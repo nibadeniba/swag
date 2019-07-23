@@ -126,6 +126,7 @@ func (self *StructPto) Map2GoFile(structPrefix string) string {
 		result.WriteString(" \n ")
 		result.WriteString(e)
 	}
+	fmt.Println("Show file ", result.String())
 	return strings.ReplaceAll(result.String(), "^", "`")
 }
 
@@ -190,7 +191,7 @@ func (self *FieldPto) Map2GoStruct(structPrefix string) string {
 				result := e.Map2GoStruct(structPrefix)
 				allFieldDecls = append(allFieldDecls, result)
 
-				e.Type = structPrefix + strings.Title(e.Name)
+				e.Type = structPrefix + strings.Title(strings.ReplaceAll(e.Name, "-", ""))
 			}
 
 			if e.IsArray {
