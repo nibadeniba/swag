@@ -1281,6 +1281,7 @@ func (parser *Parser) parseField(field *ast.Field) (*structField, error) {
 		for _, e := range strings.Split(enumsTag, ",") {
 			value, err := defineType(enumType, e)
 			if err != nil {
+				fmt.Println(err)
 				return nil, err
 			}
 			structField.enums = append(structField.enums, value)

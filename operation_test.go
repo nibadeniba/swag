@@ -754,7 +754,7 @@ func TestStructPto_Map2GoFile(t *testing.T) {
 		Required: true,
 		Desc:     " ",
 		IsArray:  false,
-		Fields: []FieldPto{
+		Fields: []*FieldPto{
 			{
 				Name:     "name",
 				Required: true,
@@ -769,7 +769,7 @@ func TestStructPto_Map2GoFile(t *testing.T) {
 				Desc:     "手机号",
 				Ex:       "format(mobile)",
 				IsArray:  false,
-				Child: []FieldPto{
+				Child: []*FieldPto{
 					{
 						Name:     "mobile",
 						Required: true,
@@ -777,7 +777,7 @@ func TestStructPto_Map2GoFile(t *testing.T) {
 						Desc:     "手机号2",
 						Ex:       "format(mobile)",
 						IsArray:  true,
-						Child: []FieldPto{
+						Child: []*FieldPto{
 							{
 								Name:     "name",
 								Required: true,
@@ -795,7 +795,7 @@ func TestStructPto_Map2GoFile(t *testing.T) {
 				Type:     "struct",
 				Desc:     "地址列表",
 				IsArray:  true,
-				Child: []FieldPto{
+				Child: []*FieldPto{
 					{
 						Name:     "area1",
 						Required: true,

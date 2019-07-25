@@ -6,12 +6,14 @@ import (
 	goparser "go/parser"
 	"go/token"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/go-openapi/jsonreference"
 	"github.com/go-openapi/spec"
@@ -39,6 +41,7 @@ type Pto interface {
 	AddParent(pto *FieldPto)
 	GetLevel() int
 	GetParent() Pto
+	ShouldAutoPkgFunc() bool
 }
 
 type StructPto struct {
@@ -47,6 +50,46 @@ type StructPto struct {
 	Desc     string
 	IsArray  bool
 	Fields   []*FieldPto
+
+	FullName      string
+	ShouldAutoPkg bool
+}
+
+func (self *StructPto) FindSPOrChildSPBy(name string) Pto {
+	if name == self.Name {
+		return self
+	}
+
+	for i, e := range self.Fields {
+		if e.Name == name {
+			return self.Fields[i]
+		}
+		for _, f := range e.Child {
+			return f.FindSPOrChildSPBy(name)
+		}
+	}
+	return nil
+}
+
+func (self *FieldPto) FindSPOrChildSPBy(name string) Pto {
+	if name == self.Name {
+		return self
+	}
+
+	for i, e := range self.Child {
+		if e.Name == name {
+			return self.Child[i]
+		}
+
+		for _, f := range e.Child {
+			return f.FindSPOrChildSPBy(name)
+		}
+	}
+	return nil
+}
+
+func (self *StructPto) ShouldAutoPkgFunc() bool {
+	return self.ShouldAutoPkg
 }
 
 func (self *StructPto) Add(pto *FieldPto) {
@@ -94,12 +137,21 @@ func (self *StructPto) Map2GoFile(structPrefix string) string {
 	var newFields []FieldPto
 	var allFieldDecls []string
 
+	if strings.HasSuffix(self.Name, "_") {
+		// 末尾有_
+		self.Name = self.Name[:len(self.Name)-1]
+		self.ShouldAutoPkg = true
+	}
+	self.Name = structPrefix + strings.ReplaceAll(strings.Title(self.Name), "-", "")
+
 	for _, e := range self.Fields {
+		e.Name = strings.Title(strings.ReplaceAll(e.Name, "-", ""))
+
 		if e.Type == "struct" {
 			result := e.Map2GoStruct(structPrefix)
 			allFieldDecls = append(allFieldDecls, result)
 
-			e.Type = structPrefix + strings.ReplaceAll(strings.Title(e.Name), "-", "")
+			e.Type = e.Name
 		}
 
 		if e.IsArray {
@@ -107,15 +159,14 @@ func (self *StructPto) Map2GoFile(structPrefix string) string {
 		}
 
 		if e.Required {
-			e.Desc = "必有； " + e.Desc
+			e.Ex += " validate(required) "
 		}
 
-		e.Name = strings.Title(strings.ReplaceAll(e.Name, "-", ""))
 		newFields = append(newFields, *e)
 	}
 
 	err = parsed.Execute(&result, &Temp{
-		StructName: structPrefix + strings.ReplaceAll(strings.Title(self.Name), "-", ""),
+		StructName: self.Name,
 		Fields:     newFields,
 	})
 	if err != nil {
@@ -126,8 +177,13 @@ func (self *StructPto) Map2GoFile(structPrefix string) string {
 		result.WriteString(" \n ")
 		result.WriteString(e)
 	}
-	fmt.Println("Show file ", result.String())
-	return strings.ReplaceAll(result.String(), "^", "`")
+
+	var r string
+	r = strings.ReplaceAll(result.String(), "(", ":\"")
+	r = strings.ReplaceAll(r, ")", "\"")
+	r = strings.ReplaceAll(r, "^", "`")
+	//fmt.Println(r)
+	return r
 }
 
 func (self *StructPto) GetLevel() int {
@@ -145,6 +201,12 @@ type FieldPto struct {
 
 	IsArray bool
 	Child   []*FieldPto
+
+	ShouldAutoPkg bool
+}
+
+func (self *FieldPto) ShouldAutoPkgFunc() bool {
+	return self.ShouldAutoPkg
 }
 
 func (self *FieldPto) Add(pto *FieldPto) {
@@ -186,12 +248,19 @@ func (self *FieldPto) Map2GoStruct(structPrefix string) string {
 	var allFieldDecls []string
 
 	if self.Type == "struct" {
+		if strings.HasSuffix(self.Name, "_") {
+			// 末尾有_
+			self.Name = self.Name[:len(self.Name)-1]
+			self.ShouldAutoPkg = true
+		}
+		self.Name = structPrefix + strings.ReplaceAll(strings.Title(self.Name), "-", "")
 		for _, e := range self.Child {
+			e.Name = strings.Title(strings.ReplaceAll(e.Name, "-", ""))
+
 			if e.Type == "struct" {
 				result := e.Map2GoStruct(structPrefix)
 				allFieldDecls = append(allFieldDecls, result)
-
-				e.Type = structPrefix + strings.Title(strings.ReplaceAll(e.Name, "-", ""))
+				e.Type = e.Name
 			}
 
 			if e.IsArray {
@@ -199,17 +268,15 @@ func (self *FieldPto) Map2GoStruct(structPrefix string) string {
 			}
 
 			if e.Required {
-				e.Desc = "必有； " + e.Desc
+				e.Ex += " validate(required) "
 			}
-
-			e.Name = strings.Title(strings.ReplaceAll(e.Name, "-", ""))
 
 			newFields = append(newFields, *e)
 		}
 	}
 
 	err = parsed.Execute(&result, &Temp{
-		StructName: structPrefix + strings.ReplaceAll(strings.Title(self.Name), "-", ""),
+		StructName: self.Name,
 		Fields:     newFields,
 	})
 	if err != nil {
@@ -376,11 +443,12 @@ func (operation *Operation) findMatches(matches []string) (name string, schemaTy
 			matches[2] == "T" || matches[2] == "F" {
 			paramType = defaultParam
 			require, _ = strconv.ParseBool(matches[2])
-		} else if matches[3] == "true" || matches[3] == "false" ||
+		}
+
+		if matches[3] == "true" || matches[3] == "false" ||
 			matches[3] == "T" || matches[3] == "F" {
 			require, _ = strconv.ParseBool(matches[3])
 		} else {
-			paramType = defaultParam
 			require = true
 		}
 	case 6:
@@ -424,13 +492,15 @@ func (operation *Operation) ParseParamComment(commentLine string, astFile *ast.F
 		// +++结束+++
 		if operation.SP != nil {
 			structPrefix := "Param"
-			typeName := structPrefix + strings.Title(operation.SP.Name)
-
 			if err := operation.EndTheStruct(structPrefix); err != nil {
 				return err
 			}
 
-			paSp := createParameter("body", operation.SP.Desc, operation.SP.Name, "swagauto."+TransToValidSchemeType(typeName), operation.SP.Required)
+			fullName := operation.SP.FullName
+			if operation.SP.IsArray {
+				fullName = "array_" + fullName
+			}
+			paSp := createParameter("body", operation.SP.Desc, operation.SP.Name, fullName, operation.SP.Required)
 			operation.Operation.Parameters = append(operation.Operation.Parameters, paSp)
 			operation.SP = nil
 			operation.LastPto = nil
@@ -1008,7 +1078,6 @@ func (operation *Operation) ParseResponseComment(commentLine string, astFile *as
 		}
 
 		response.Description = operation.SP.Desc
-
 		response.Schema.Required = []string{strconv.FormatBool(operation.SP.Required)}
 		if operation.SP.IsArray {
 			response.Schema.Type = []string{"array"}
@@ -1016,7 +1085,7 @@ func (operation *Operation) ParseResponseComment(commentLine string, astFile *as
 			response.Schema.Items = &spec.SchemaOrArray{
 				Schema: &spec.Schema{
 					SchemaProps: spec.SchemaProps{
-						Ref: spec.Ref{Ref: jsonreference.MustCreateRef("#/definitions/" + "swagauto." + structPrefix + strings.Title(operation.SP.Name))},
+						Ref: spec.Ref{Ref: jsonreference.MustCreateRef("#/definitions/" + operation.SP.FullName)},
 					},
 				},
 			}
@@ -1024,7 +1093,7 @@ func (operation *Operation) ParseResponseComment(commentLine string, astFile *as
 			response.Schema.Type = []string{"object"}
 
 			response.Schema.Ref = spec.Ref{
-				Ref: jsonreference.MustCreateRef("#/definitions/" + "swagauto." + structPrefix + strings.Title(operation.SP.Name)),
+				Ref: jsonreference.MustCreateRef("#/definitions/" + operation.SP.FullName),
 			}
 		}
 
@@ -1107,38 +1176,52 @@ func (operation *Operation) EndTheStruct(structPrefix string) error {
 	if operation.SP != nil {
 		// 清空SP ，注册Struct
 		// 引用这个虚拟的Model
-		pkgName := "swagauto"
-		typeName := structPrefix + strings.Title(operation.SP.Name)
-
 		fset := token.NewFileSet()
 		gFile := operation.SP.Map2GoFile(structPrefix)
-
 		astFile, err := goparser.ParseFile(fset, "", gFile, goparser.ParseComments)
 		if err != nil {
 			return err
+		}
+
+		pkgName := "swagauto"
+		typeName := operation.SP.Name
+		pto := operation.SP.FindSPOrChildSPBy(typeName)
+		if pto != nil {
+			if pto.ShouldAutoPkgFunc() {
+				pkgName += GetNonceInt(4)
+			}
 		}
 
 		for _, astDeclaration := range astFile.Decls {
 			if generalDeclaration, ok := astDeclaration.(*ast.GenDecl); ok && generalDeclaration.Tok == token.TYPE {
 				for _, astSpec := range generalDeclaration.Specs {
 					if typeSpec, ok := astSpec.(*ast.TypeSpec); ok {
+						Printf(" -- registerTempType -- %s", pkgName+"."+typeSpec.Name.String())
 						if _, ok := operation.parser.TypeDefinitions[pkgName]; !ok {
 							operation.parser.TypeDefinitions[pkgName] = make(map[string]*ast.TypeSpec)
 						}
 
-						Printf(" -- registerTempType -- %s", pkgName+"."+typeSpec.Name.String())
 						operation.parser.TypeDefinitions[pkgName][typeSpec.Name.String()] = typeSpec
 						operation.parser.registerTypes[pkgName+"."+typeSpec.Name.String()] = typeSpec
 					}
 				}
 			}
 		}
-
-		if operation.SP.IsArray {
-			typeName = "array_" + typeName
-		}
+		operation.SP.FullName = pkgName + "." + TransToValidSchemeType(typeName)
 	}
 	return nil
+}
+
+func GetNonceInt(n int) string {
+	chars := []byte("0123456789")
+	value := []byte{}
+	m := len(chars)
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	for i := 0; i < n; i++ {
+		value = append(value, chars[r.Intn(m)])
+	}
+	return string(value)
 }
 
 // ParseResponseHeaderComment parses comment for gived `response header` comment string.
