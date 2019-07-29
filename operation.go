@@ -148,7 +148,7 @@ func (self *StructPto) Map2GoFile(structPrefix string) string {
 		e.Name = strings.Title(strings.ReplaceAll(e.Name, "-", ""))
 
 		if e.Type == "struct" {
-			result := e.Map2GoStruct(structPrefix)
+			result := e.Map2GoStruct()
 			allFieldDecls = append(allFieldDecls, result)
 
 			e.Type = e.Name
@@ -230,7 +230,7 @@ func (self *FieldPto) GetParent() Pto {
 	return self.Parent
 }
 
-func (self *FieldPto) Map2GoStruct(structPrefix string) string {
+func (self *FieldPto) Map2GoStruct() string {
 	// 这个Field必须是Struct
 	var result strings.Builder
 
@@ -253,12 +253,12 @@ func (self *FieldPto) Map2GoStruct(structPrefix string) string {
 			self.Name = self.Name[:len(self.Name)-1]
 			self.ShouldAutoPkg = true
 		}
-		self.Name = structPrefix + strings.ReplaceAll(strings.Title(self.Name), "-", "")
+		self.Name = strings.ReplaceAll(strings.Title(self.Name), "-", "")
 		for _, e := range self.Child {
 			e.Name = strings.Title(strings.ReplaceAll(e.Name, "-", ""))
 
 			if e.Type == "struct" {
-				result := e.Map2GoStruct(structPrefix)
+				result := e.Map2GoStruct()
 				allFieldDecls = append(allFieldDecls, result)
 				e.Type = e.Name
 			}
