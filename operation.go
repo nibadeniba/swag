@@ -512,7 +512,7 @@ func (operation *Operation) ParseParamComment(commentLine string, astFile *ast.F
 
 		// 普通参数
 		switch paramType {
-		case "query", "path", "header", "form", "body":
+		case "query", "path", "header", "form", "formData", "body":
 			if paramType == "body" {
 				if strings.Contains(schemaType, ".") {
 					// 引用注册
@@ -1161,10 +1161,18 @@ func (operation *Operation) ParseStruct(schemaType string, name string, required
 				operation.LastPto.AddParent(f)
 			} else if level < operation.LastPto.GetLevel() {
 				// 级数变小
-				// 加在上一级的父母的父母
-				// 本级的父母是它上级的父母的父母
-				f.Parent = operation.LastPto.GetParent().GetParent()
-				operation.LastPto.GetParent().AddParent(f)
+				// 识别级数差 n
+				// 加在上一级的(父母*n)
+				// 本级的父母是它上级的(父母*n+1)
+
+				n := operation.LastPto.GetLevel() - level
+				lp := operation.LastPto
+				for i := 0; i < n; i++ {
+					lp = lp.GetParent()
+				}
+
+				f.Parent = lp.GetParent()
+				lp.AddParent(f)
 			}
 		}
 		operation.LastPto = f
