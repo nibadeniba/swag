@@ -485,6 +485,7 @@ func (operation *Operation) ParseParamComment(commentLine string, astFile *ast.F
 		return errors.New(" Parse Error : Check you param len in : " + commentLine)
 	}
 	var param spec.Parameter
+	//Println(" Find : ", name, schemaType, paramType, required, description)
 
 	if strings.HasPrefix(name, "-") || schemaType == "struct" || schemaType == "array_struct" {
 		return operation.ParseStruct(schemaType, name, required, description, commentLine)
@@ -516,7 +517,12 @@ func (operation *Operation) ParseParamComment(commentLine string, astFile *ast.F
 			if paramType == "body" {
 				if strings.Contains(schemaType, ".") {
 					// 引用注册
-					if err := operation.registerSchemaType(DelArray(schemaType), astFile); err != nil {
+					sName := strings.Split(schemaType, ".")
+					if len(sName) != 2 {
+						panic(errors.New("see" + schemaType))
+					}
+
+					if err := operation.registerSchemaType(DelArray(sName[1]), astFile); err != nil {
 						return err
 					}
 				}
@@ -1204,7 +1210,7 @@ func (operation *Operation) EndTheStruct(structPrefix string) error {
 			if generalDeclaration, ok := astDeclaration.(*ast.GenDecl); ok && generalDeclaration.Tok == token.TYPE {
 				for _, astSpec := range generalDeclaration.Specs {
 					if typeSpec, ok := astSpec.(*ast.TypeSpec); ok {
-						Printf(" -- registerTempType -- %s", pkgName+"."+typeSpec.Name.String())
+						//Printf(" -- registerTempType -- %s", pkgName+"."+typeSpec.Name.String())
 						if _, ok := operation.parser.TypeDefinitions[pkgName]; !ok {
 							operation.parser.TypeDefinitions[pkgName] = make(map[string]*ast.TypeSpec)
 						}
@@ -1337,6 +1343,7 @@ func createParameter(paramType, description, paramName, schemaType string, requi
 		In:          paramType,
 	}
 
+	Println(" -----", schemaType)
 	if strings.HasPrefix(schemaType, "array") {
 		// 数组型
 		if paramType == "body" {

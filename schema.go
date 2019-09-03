@@ -1,6 +1,9 @@
 package swag
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // CheckSchemaType checks if typeName is not a name of primitive type
 func CheckSchemaType(typeName string) error {
@@ -27,23 +30,34 @@ func IsNumericType(typeName string) bool {
 
 // TransToValidSchemeType indicates type will transfer golang basic type to swagger supported type.
 func TransToValidSchemeType(typeName string) string {
+	var deArray bool
+	if strings.Contains(typeName, "array") {
+		deArray = true
+	}
+
 	typeName = DelArray(typeName)
+	var resultStr string
+
 	switch typeName {
 	case "uint", "int", "uint8", "int8", "uint16", "int16", "byte":
-		return "integer"
+		resultStr = "integer"
 	case "uint32", "int32", "rune":
-		return "integer"
+		resultStr = "integer"
 	case "uint64", "int64":
-		return "integer"
+		resultStr = "integer"
 	case "float32", "float64":
-		return "number"
+		resultStr = "number"
 	case "bool":
-		return "boolean"
+		resultStr = "boolean"
 	case "string":
-		return "string"
+		resultStr = "string"
 	default:
-		return typeName // to support user defined types
+		resultStr = typeName // to support user defined types
 	}
+	if deArray {
+		resultStr = "array_"
+	}
+	return resultStr
 }
 
 // IsGolangPrimitiveType determine whether the type name is a golang primitive type

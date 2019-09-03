@@ -10,6 +10,7 @@ require (
 	github.com/pkg/errors v0.8.1
 	github.com/satori/go.uuid v1.2.0
 	github.com/stretchr/testify v1.3.0
+	github.com/swaggo/files v0.0.0-20190704085106-630677cd5c14
 	github.com/swaggo/gin-swagger v1.1.0
 	github.com/urfave/cli v1.20.0
 	golang.org/x/text v0.3.0
