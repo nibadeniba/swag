@@ -28,7 +28,7 @@ brews:
 
     # Github repository to push the tap to.
     github:
-      owner: HYY-yu
+      owner: DADDYLAB
       name: homebrew-tap
 
     # Template for the url which is determined by the given Token (github or gitlab)
@@ -40,7 +40,7 @@ brews:
     # to implement the strategy and add it to your tap repository.
     # Example: http://lessthanhero.io/post/homebrew-with-private-repo-releases/
     # Default is empty.
-    download_strategy: GitHubPrivateRepositoryReleaseDownloadStrategy
+    # download_strategy: GitHubPrivateRepositoryReleaseDownloadStrategy
 
     # Allows you to add a custom require_relative at the top of the formula template
     # Default is empty
@@ -100,8 +100,8 @@ brews:
     # So you can `brew test` your formula.
     # Default is empty.
     test: |
-      system "#{bin}/program --version"
+      system "#{bin}/swag --version"
     # Custom install script for brew.
     # Default is 'bin.install "program"'.
     install: |
-      bin.install "program"
+      bin.install "swag"
