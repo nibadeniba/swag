@@ -104,4 +104,5 @@ brews:
     # Custom install script for brew.
     # Default is 'bin.install "program"'.
     install: |
+      system "rm -f #{bin}/swag"
       bin.install "swag"
