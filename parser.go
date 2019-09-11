@@ -690,7 +690,6 @@ func (parser *Parser) ParseType(astFile *ast.File) {
 					} else {
 						parser.TypeDefinitions[astFile.Name.String()][typeSpec.Name.String()] = typeSpec
 					}
-
 				}
 			}
 		}

@@ -15,7 +15,7 @@ require (
 	github.com/swaggo/gin-swagger v1.2.0
 	github.com/urfave/cli v1.20.0
 	golang.org/x/text v0.3.2
-	golang.org/x/tools v0.0.0-20190611222205-d73e1c7e250b
+	golang.org/x/tools v0.0.0-20190911022129-16c5e0f7d110
 )
 
 go 1.13

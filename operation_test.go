@@ -816,6 +816,6 @@ func TestStructPto_Map2GoFile(t *testing.T) {
 			},
 		},
 	}
-	got := self.Map2GoFile("Param")
+	got := self.Map2GoFile("Param", nil, nil)
 	fmt.Println(got)
 }

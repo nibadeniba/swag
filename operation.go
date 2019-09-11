@@ -5,10 +5,10 @@ import (
 	"go/ast"
 	goparser "go/parser"
 	"go/token"
+	"golang.org/x/tools/go/packages"
 	"log"
 	"math/rand"
 	"net/http"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -18,7 +18,6 @@ import (
 	"github.com/go-openapi/jsonreference"
 	"github.com/go-openapi/spec"
 	"github.com/pkg/errors"
-	"golang.org/x/tools/go/loader"
 )
 
 // Operation describes a single API operation on a path.
@@ -118,7 +117,7 @@ const reTemplate = `
 	}
 `
 
-func (self *StructPto) Map2GoFile(structPrefix string) string {
+func (self *StructPto) Map2GoFile(structPrefix string, srcAstFile *ast.File, operation *Operation) string {
 	Println("start map file ... ")
 	var result strings.Builder
 	result.WriteString("package swagauto")
@@ -148,10 +147,21 @@ func (self *StructPto) Map2GoFile(structPrefix string) string {
 		e.Name = strings.Title(strings.ReplaceAll(e.Name, "-", ""))
 
 		if e.Type == "struct" {
-			result := e.Map2GoStruct()
+			result := e.Map2GoStruct(operation, srcAstFile)
 			allFieldDecls = append(allFieldDecls, result)
 
 			e.Type = e.Name
+		}
+
+		if !IsGolangPrimitiveType(e.Type) {
+			ref := strings.Split(e.Type, ".")
+			if len(ref) == 2 {
+				err = operation.registerSchemaType(e.Type, srcAstFile)
+				if err != nil {
+					Println(err, " -- err -- ")
+					return ""
+				}
+			}
 		}
 
 		if e.IsArray {
@@ -230,7 +240,7 @@ func (self *FieldPto) GetParent() Pto {
 	return self.Parent
 }
 
-func (self *FieldPto) Map2GoStruct() string {
+func (self *FieldPto) Map2GoStruct(operation *Operation, srcAstFile *ast.File) string {
 	// 这个Field必须是Struct
 	var result strings.Builder
 
@@ -258,9 +268,20 @@ func (self *FieldPto) Map2GoStruct() string {
 			e.Name = strings.Title(strings.ReplaceAll(e.Name, "-", ""))
 
 			if e.Type == "struct" {
-				result := e.Map2GoStruct()
+				result := e.Map2GoStruct(operation, srcAstFile)
 				allFieldDecls = append(allFieldDecls, result)
 				e.Type = e.Name
+			}
+
+			if !IsGolangPrimitiveType(e.Type) {
+				ref := strings.Split(e.Type, ".")
+				if len(ref) == 2 {
+					err = operation.registerSchemaType(e.Type, srcAstFile)
+					if err != nil {
+						Println(err, " -- err -- ")
+						return ""
+					}
+				}
 			}
 
 			if e.IsArray {
@@ -493,7 +514,7 @@ func (operation *Operation) ParseParamComment(commentLine string, astFile *ast.F
 		// +++结束+++
 		if operation.SP != nil {
 			structPrefix := "Param"
-			if err := operation.EndTheStruct(structPrefix); err != nil {
+			if err := operation.EndTheStruct(structPrefix, astFile); err != nil {
 				return err
 			}
 
@@ -547,30 +568,88 @@ func (operation *Operation) registerSchemaType(schemaType string, astFile *ast.F
 	}
 	pkgName := refSplit[0]
 	typeName := refSplit[1]
+
 	if typeSpec, ok := operation.parser.TypeDefinitions[pkgName][typeName]; ok {
 		operation.parser.registerTypes[schemaType] = typeSpec
 		return nil
 	}
-	var typeSpec *ast.TypeSpec
+
+	typeSpecMap := make(map[string]*ast.TypeSpec)
 	if astFile == nil {
 		return fmt.Errorf("can not register schema type: %q reason: astFile == nil", schemaType)
 	}
+
 	for _, imp := range astFile.Imports {
-		if imp.Name != nil && imp.Name.Name == pkgName { // the import had an alias that matched
-			break
-		}
 		impPath := strings.Replace(imp.Path.Value, `"`, ``, -1)
-		if strings.HasSuffix(impPath, "/"+pkgName) {
+
+		if strings.HasSuffix(impPath, "/"+pkgName) || (imp.Name != nil && imp.Name.Name == pkgName) {
 			var err error
-			typeSpec, err = findTypeDef(impPath, typeName)
+
+			conf := &packages.Config{
+				Mode: packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo,
+			}
+			ps, err := packages.Load(conf, impPath)
 			if err != nil {
-				return errors.Wrapf(err, "can not find type def: %q", schemaType)
+				return err
+			}
+
+			var allNames []string
+			for i := range ps {
+				for j := range ps[i].Syntax {
+					for _, astDeclaration := range ps[i].Syntax[j].Decls {
+						if generalDeclaration, ok := astDeclaration.(*ast.GenDecl); ok && generalDeclaration.Tok == token.TYPE {
+							for _, astSpec := range generalDeclaration.Specs {
+								if typeSpec, ok := astSpec.(*ast.TypeSpec); ok {
+									if typeSpec.Name.String() == typeName {
+										allNames = append(allNames, typeName)
+										typeSpecMap[pkgName+"."+typeName] = typeSpec
+
+										// 内部的结构体也记录
+										if t, ok := typeSpec.Type.(*ast.StructType); ok {
+											for _, field := range t.Fields.List {
+												switch t := field.Type.(type) {
+												case *ast.Ident:
+													allNames = append(allNames, t.Name)
+												case *ast.ArrayType:
+													allNames = append(allNames, TransToValidSchemeType(fmt.Sprintf("%s", t.Elt)))
+												default:
+													continue
+												}
+											}
+										}
+										break
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+
+			for i := range ps {
+				for j := range ps[i].Syntax {
+					for _, astDeclaration := range ps[i].Syntax[j].Decls {
+						if generalDeclaration, ok := astDeclaration.(*ast.GenDecl); ok && generalDeclaration.Tok == token.TYPE {
+							for _, astSpec := range generalDeclaration.Specs {
+								if typeSpec, ok := astSpec.(*ast.TypeSpec); ok {
+									for h := range allNames {
+										if typeSpec.Name.String() == allNames[h] {
+											log.Println(" find typeSpec ", pkgName+"."+allNames[h])
+											typeSpecMap[pkgName+"."+allNames[h]] = typeSpec
+										}
+									}
+									break
+								}
+							}
+						}
+					}
+				}
 			}
 			break
 		}
 	}
 
-	if typeSpec == nil {
+	if len(typeSpecMap) == 0 {
 		return fmt.Errorf("can not find schema type: %q", schemaType)
 	}
 
@@ -578,8 +657,14 @@ func (operation *Operation) registerSchemaType(schemaType string, astFile *ast.F
 		operation.parser.TypeDefinitions[pkgName] = make(map[string]*ast.TypeSpec)
 	}
 
-	operation.parser.TypeDefinitions[pkgName][typeName] = typeSpec
-	operation.parser.registerTypes[schemaType] = typeSpec
+	for k, typeSpec := range typeSpecMap {
+		refSplit := strings.Split(k, ".")
+		pN := refSplit[0]
+		pT := refSplit[1]
+
+		operation.parser.TypeDefinitions[pN][pT] = typeSpec
+		operation.parser.registerTypes[k] = typeSpec
+	}
 	return nil
 }
 
@@ -831,60 +916,14 @@ func (operation *Operation) ParseSecurityComment(commentLine string) error {
 	return nil
 }
 
-// findTypeDef attempts to find the *ast.TypeSpec for a specific type given the
-// type's name and the package's import path
-// TODO: improve finding external pkg
-func findTypeDef(importPath, typeName string) (*ast.TypeSpec, error) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return nil, err
-	}
-
-	conf := loader.Config{
-		ParserMode: goparser.SpuriousErrors,
-		Cwd:        cwd,
-	}
-
-	conf.Import(importPath)
-
-	lprog, err := conf.Load()
-	if err != nil {
-		return nil, err
-	}
-
-	// If the pkg is vendored, the actual pkg path is going to resemble
-	// something like "{importPath}/vendor/{importPath}"
-	for k := range lprog.AllPackages {
-		realPkgPath := k.Path()
-
-		if strings.Contains(realPkgPath, "vendor/"+importPath) {
-			importPath = realPkgPath
-		}
-	}
-
-	pkgInfo := lprog.Package(importPath)
-
-	if pkgInfo == nil {
-		return nil, errors.New("package was nil")
-	}
-
-	// TODO: possibly cache pkgInfo since it's an expensive operation
-
-	for i := range pkgInfo.Files {
-		for _, astDeclaration := range pkgInfo.Files[i].Decls {
-			if generalDeclaration, ok := astDeclaration.(*ast.GenDecl); ok && generalDeclaration.Tok == token.TYPE {
-				for _, astSpec := range generalDeclaration.Specs {
-					if typeSpec, ok := astSpec.(*ast.TypeSpec); ok {
-						if typeSpec.Name.String() == typeName {
-							return typeSpec, nil
-						}
-					}
-				}
-			}
-		}
-	}
-	return nil, errors.New("type spec not found")
-}
+// 取消这个函数
+//// findTypeDef attempts to find the *ast.TypeSpec for a specific type given the
+//// type's name and the package's import path
+//// TODO: improve finding external pkg
+//func findTypeDef(importPath, typeName string) ([]*ast.TypeSpec, error) {
+//	typeSpecs := make([]*ast.TypeSpec, 0)
+//	return typeSpecs, nil
+//}
 
 func (operation *Operation) ParseSingleComment(commentLine string) error {
 	mathches := regexp.MustCompile(`\s{3,}`).Split(commentLine, -1)
@@ -1079,7 +1118,7 @@ func (operation *Operation) ParseResponseComment(commentLine string, astFile *as
 	if name == "EndStruct" {
 		// +++结束+++
 		structPrefix := "Response"
-		if err := operation.EndTheStruct(structPrefix); err != nil {
+		if err := operation.EndTheStruct(structPrefix, astFile); err != nil {
 			return err
 		}
 
@@ -1186,12 +1225,12 @@ func (operation *Operation) ParseStruct(schemaType string, name string, required
 	return nil
 }
 
-func (operation *Operation) EndTheStruct(structPrefix string) error {
+func (operation *Operation) EndTheStruct(structPrefix string, srcAstFile *ast.File) error {
 	if operation.SP != nil {
 		// 清空SP ，注册Struct
 		// 引用这个虚拟的Model
 		fset := token.NewFileSet()
-		gFile := operation.SP.Map2GoFile(structPrefix)
+		gFile := operation.SP.Map2GoFile(structPrefix, srcAstFile, operation)
 		astFile, err := goparser.ParseFile(fset, "", gFile, goparser.ParseComments)
 		if err != nil {
 			return err
@@ -1205,7 +1244,6 @@ func (operation *Operation) EndTheStruct(structPrefix string) error {
 				pkgName += GetNonceInt(4)
 			}
 		}
-
 		for _, astDeclaration := range astFile.Decls {
 			if generalDeclaration, ok := astDeclaration.(*ast.GenDecl); ok && generalDeclaration.Tok == token.TYPE {
 				for _, astSpec := range generalDeclaration.Specs {
@@ -1343,7 +1381,6 @@ func createParameter(paramType, description, paramName, schemaType string, requi
 		In:          paramType,
 	}
 
-	Println(" -----", schemaType)
 	if strings.HasPrefix(schemaType, "array") {
 		// 数组型
 		if paramType == "body" {
