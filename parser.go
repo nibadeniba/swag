@@ -688,6 +688,7 @@ func (parser *Parser) ParseType(astFile *ast.File) {
 					if IsGolangPrimitiveType(typeName) {
 						parser.CustomPrimitiveTypes[typeSpec.Name.String()] = TransToValidSchemeType(typeName)
 					} else {
+						//Println(astFile.Name.String(), " -- ", typeSpec.Name.String() ," -- ")
 						parser.TypeDefinitions[astFile.Name.String()][typeSpec.Name.String()] = typeSpec
 					}
 				}

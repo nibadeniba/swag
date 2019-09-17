@@ -499,7 +499,7 @@ func has(s []string, key string) bool {
 //              [param name]    [paramType]   [data type]     [is mandatory?]    [Comment]               [attribute(optional)]
 // Also: @Param   some_id          int       (default:query)   (default:true)    "Some ID"
 func (operation *Operation) ParseParamComment(commentLine string, astFile *ast.File) error {
-	Println(" start parse ... ", commentLine)
+	//Println(" start parse ... ", commentLine)
 
 	name, schemaType, paramType, required, description := operation.findMatches(regexp.MustCompile(`\s{3,}`).Split(commentLine, -1))
 	if len(name) == 0 {
@@ -542,8 +542,9 @@ func (operation *Operation) ParseParamComment(commentLine string, astFile *ast.F
 					if len(sName) != 2 {
 						panic(errors.New("see" + schemaType))
 					}
+					//Println(" == register == ", schemaType)
 
-					if err := operation.registerSchemaType(DelArray(sName[1]), astFile); err != nil {
+					if err := operation.registerSchemaType(DelArray(schemaType), astFile); err != nil {
 						return err
 					}
 				}
