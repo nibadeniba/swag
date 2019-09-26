@@ -31,7 +31,7 @@ func IsNumericType(typeName string) bool {
 // TransToValidSchemeType indicates type will transfer golang basic type to swagger supported type.
 func TransToValidSchemeType(typeName string) string {
 	var deArray bool
-	if strings.Contains(typeName, "array") {
+	if strings.Contains(typeName, "array_") {
 		deArray = true
 	}
 
@@ -45,7 +45,7 @@ func TransToValidSchemeType(typeName string) string {
 		resultStr = "integer"
 	case "uint64", "int64":
 		resultStr = "integer"
-	case "float32", "float64":
+	case "float32", "float64", "float":
 		resultStr = "number"
 	case "bool":
 		resultStr = "boolean"

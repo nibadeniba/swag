@@ -91,6 +91,13 @@ func getPropertyName(expr ast.Expr, parser *Parser) (propertyName, error) {
 	}
 
 	if astTypeArray, ok := expr.(*ast.ArrayType); ok { // if array
+		if _, ok := astTypeArray.Elt.(*ast.StructType); ok {
+			return propertyName{SchemaType: "array", ArrayType: "object"}, nil
+		} else if _, ok := astTypeArray.Elt.(*ast.MapType); ok {
+			return propertyName{SchemaType: "array", ArrayType: "object"}, nil
+		} else if _, ok := astTypeArray.Elt.(*ast.InterfaceType); ok {
+			return propertyName{SchemaType: "array", ArrayType: "object"}, nil
+		}
 		return getArrayPropertyName(astTypeArray, parser), nil
 	}
 

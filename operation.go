@@ -594,15 +594,14 @@ func (operation *Operation) registerSchemaType(schemaType string, astFile *ast.F
 				return err
 			}
 
-			var allNames []string
+			var nestFieldNames []string
 			for i := range ps {
 				for j := range ps[i].Syntax {
 					for _, astDeclaration := range ps[i].Syntax[j].Decls {
 						if generalDeclaration, ok := astDeclaration.(*ast.GenDecl); ok && generalDeclaration.Tok == token.TYPE {
 							for _, astSpec := range generalDeclaration.Specs {
-								if typeSpec, ok := astSpec.(*ast.TypeSpec); ok {
-									if typeSpec.Name.String() == typeName {
-										allNames = append(allNames, typeName)
+								if typeSpec, ok := astSpec.(*ast.TypeSpec); ok && typeSpec.Name.String() == typeName {
+									if _, ok := typeSpecMap[pkgName+"."+typeName]; !ok {
 										typeSpecMap[pkgName+"."+typeName] = typeSpec
 
 										// 内部的结构体也记录
@@ -610,43 +609,25 @@ func (operation *Operation) registerSchemaType(schemaType string, astFile *ast.F
 											for _, field := range t.Fields.List {
 												switch t := field.Type.(type) {
 												case *ast.Ident:
-													allNames = append(allNames, t.Name)
+													nestFieldNames = append(nestFieldNames, t.Name)
 												case *ast.ArrayType:
-													allNames = append(allNames, TransToValidSchemeType(fmt.Sprintf("%s", t.Elt)))
+													nestFieldNames = append(nestFieldNames, TransToValidSchemeType(fmt.Sprintf("%s", t.Elt)))
 												default:
 													continue
 												}
 											}
 										}
-										break
 									}
 								}
+								break
 							}
 						}
 					}
 				}
 			}
-
-			for i := range ps {
-				for j := range ps[i].Syntax {
-					for _, astDeclaration := range ps[i].Syntax[j].Decls {
-						if generalDeclaration, ok := astDeclaration.(*ast.GenDecl); ok && generalDeclaration.Tok == token.TYPE {
-							for _, astSpec := range generalDeclaration.Specs {
-								if typeSpec, ok := astSpec.(*ast.TypeSpec); ok {
-									for h := range allNames {
-										if typeSpec.Name.String() == allNames[h] {
-											log.Println(" find typeSpec ", pkgName+"."+allNames[h])
-											typeSpecMap[pkgName+"."+allNames[h]] = typeSpec
-										}
-									}
-									break
-								}
-							}
-						}
-					}
-				}
+			if len(nestFieldNames) > 0 {
+				regNestFields(ps, nestFieldNames, pkgName, typeSpecMap)
 			}
-			break
 		}
 	}
 
@@ -667,6 +648,45 @@ func (operation *Operation) registerSchemaType(schemaType string, astFile *ast.F
 		operation.parser.registerTypes[k] = typeSpec
 	}
 	return nil
+}
+
+func regNestFields(ps []*packages.Package, nestNames []string, pkgName string, typeSpecMap map[string]*ast.TypeSpec) {
+	for i := range ps {
+		for j := range ps[i].Syntax {
+			for _, astDeclaration := range ps[i].Syntax[j].Decls {
+				if generalDeclaration, ok := astDeclaration.(*ast.GenDecl); ok && generalDeclaration.Tok == token.TYPE {
+					for _, astSpec := range generalDeclaration.Specs {
+						if typeSpec, ok := astSpec.(*ast.TypeSpec); ok {
+							for h := range nestNames {
+								if typeSpec.Name.String() == nestNames[h] {
+									if _, ok := typeSpecMap[pkgName+"."+nestNames[h]]; !ok {
+										//Println(" find typeSpec ", pkgName+"."+nestNames[h])
+										typeSpecMap[pkgName+"."+nestNames[h]] = typeSpec
+
+										// 内部的记录
+										if t, ok := typeSpec.Type.(*ast.StructType); ok {
+											for _, field := range t.Fields.List {
+												switch t := field.Type.(type) {
+												case *ast.Ident:
+													nestNames = append(nestNames, t.Name)
+												case *ast.ArrayType:
+													nestNames = append(nestNames, TransToValidSchemeType(fmt.Sprintf("%s", t.Elt)))
+												default:
+													continue
+												}
+												regNestFields(ps, nestNames, pkgName, typeSpecMap)
+											}
+										}
+									}
+									break
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 var regexAttributes = map[string]*regexp.Regexp{
@@ -1382,7 +1402,7 @@ func createParameter(paramType, description, paramName, schemaType string, requi
 		In:          paramType,
 	}
 
-	if strings.HasPrefix(schemaType, "array") {
+	if strings.HasPrefix(schemaType, "array_") {
 		// 数组型
 		if paramType == "body" {
 			// 引用型
