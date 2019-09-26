@@ -1157,7 +1157,6 @@ func (operation *Operation) ParseResponseComment(commentLine string, astFile *as
 			}
 		} else {
 			response.Schema.Type = []string{"object"}
-
 			response.Schema.Ref = spec.Ref{
 				Ref: jsonreference.MustCreateRef("#/definitions/" + operation.SP.FullName),
 			}
