@@ -49,7 +49,7 @@ func (f *Push) Build(config *Config) error {
 	println(" 正在上传文件 " + module)
 
 	cmd := exec.Command("scp", config.Dir+"/swagger.json",
-		"root@192.168.4.31:/root/"+path+"/"+module+".json")
+		"yf@192.168.4.31:/root/"+path+"/"+module+".json")
 	var out bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &out
@@ -119,7 +119,7 @@ func (f *Push) Build(config *Config) error {
 
 	cmd = exec.Command("scp",
 		gFile.Name(),
-		"root@192.168.4.31:/root/"+path+"/"+"group.json")
+		"yf@192.168.4.31:/root/"+path+"/"+"group.json")
 	cmd.Stdout = &out
 	cmd.Stderr = &stderr
 
