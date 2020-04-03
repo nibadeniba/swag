@@ -499,14 +499,14 @@ func has(s []string, key string) bool {
 //              [param name]    [paramType]   [data type]     [is mandatory?]    [Comment]               [attribute(optional)]
 // Also: @Param   some_id          int       (default:query)   (default:true)    "Some ID"
 func (operation *Operation) ParseParamComment(commentLine string, astFile *ast.File) error {
-	//Println(" start parse ... ", commentLine)
+	// Println(" start parse ... ", commentLine)
 
 	name, schemaType, paramType, required, description := operation.findMatches(regexp.MustCompile(`\s{3,}`).Split(commentLine, -1))
 	if len(name) == 0 {
 		return errors.New(" Parse Error : Check you param len in : " + commentLine)
 	}
 	var param spec.Parameter
-	//Println(" Find : ", name, schemaType, paramType, required, description)
+	// Println(" Find : ", name, schemaType, paramType, required, description)
 
 	if strings.HasPrefix(name, "-") || schemaType == "struct" || schemaType == "array_struct" {
 		return operation.ParseStruct(schemaType, name, required, description, commentLine)
