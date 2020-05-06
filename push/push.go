@@ -15,6 +15,7 @@ const (
 	CMS_G   = "http://c.doc.dlab.com/json/group.json"
 	DIRFT_G = "http://drift.doc.dlab.com/json/group.json"
 	APP_G   = "http://app.doc.dlab.com/json/group.json"
+	OPS_G   = "http://ops.doc.dlab.com/json/group.json"
 )
 
 type Push struct {
@@ -70,6 +71,8 @@ func (f *Push) Build(config *Config) error {
 		urlF = DIRFT_G
 	} else if system == "app" {
 		urlF = APP_G
+	} else if system == "ops" {
+		urlF = OPS_G
 	}
 
 	resp, err := http.Get(urlF)
