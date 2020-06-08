@@ -11,11 +11,11 @@ import (
 )
 
 const (
-	EC_G    = "http://ec.doc.dlab.com/json/group.json"
-	CMS_G   = "http://c.doc.dlab.com/json/group.json"
-	DIRFT_G = "http://drift.doc.dlab.com/json/group.json"
-	APP_G   = "http://app.doc.dlab.com/json/group.json"
-	OPS_G   = "http://ops.doc.dlab.com/json/group.json"
+	EC_G    = "http://ec.doc.dlab.cn/json/group.json"
+	CMS_G   = "http://c.doc.dlab.cn/json/group.json"
+	DIRFT_G = "http://drift.doc.dlab.cn/json/group.json"
+	APP_G   = "http://app.doc.dlab.cn/json/group.json"
+	OPS_G   = "http://ops.doc.dlab.cn/json/group.json"
 )
 
 type Push struct {
