@@ -3,7 +3,6 @@ package swag
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/go-openapi/jsonreference"
 	"go/ast"
 	"go/build"
 	goparser "go/parser"
@@ -19,6 +18,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/go-openapi/jsonreference"
 
 	"github.com/KyleBanks/depth"
 	"github.com/go-openapi/spec"
@@ -773,7 +774,10 @@ func (parser *Parser) collectRequiredFields(pkgName string, properties map[strin
 		prop := properties[k]
 
 		// todo find the pkgName of the property type
-		tname := prop.SchemaProps.Type[0]
+		var tname string
+		if len(prop.SchemaProps.Type) > 0 {
+			tname = prop.SchemaProps.Type[0]
+		}
 		if _, ok := parser.TypeDefinitions[pkgName][tname]; ok {
 			tspec := parser.TypeDefinitions[pkgName][tname]
 			parser.ParseDefinition(pkgName, tname, tspec)
@@ -918,7 +922,11 @@ func (parser *Parser) parseStruct(pkgName string, fields *ast.FieldList) (spec.S
 
 	// unset required from properties because we've collected them
 	for k, prop := range properties {
-		tname := prop.SchemaProps.Type[0]
+		var tname string
+		if len(prop.SchemaProps.Type) > 0 {
+			tname = prop.SchemaProps.Type[0]
+		}
+
 		if tname != "object" {
 			prop.SchemaProps.Required = make([]string, 0)
 		}
@@ -1000,16 +1008,9 @@ func (parser *Parser) parseStructField(pkgName string, field *ast.Field) (map[st
 			parser.TypeDefinitions[pkgName][structField.schemaType])
 		properties[structField.name] = spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Type:        []string{"object"}, // to avoid swagger validation error
 				Description: desc,
-				AdditionalProperties: &spec.SchemaOrBool{
-					Schema: &spec.Schema{
-						SchemaProps: spec.SchemaProps{
-							Ref: spec.Ref{
-								Ref: jsonreference.MustCreateRef("#/definitions/" + pkgName + "." + structField.schemaType),
-							},
-						},
-					},
+				Ref: spec.Ref{
+					Ref: jsonreference.MustCreateRef("#/definitions/" + pkgName + "." + structField.schemaType),
 				},
 			},
 			SwaggerSchemaProps: spec.SwaggerSchemaProps{
