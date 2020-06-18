@@ -5,7 +5,6 @@ import (
 	"go/ast"
 	goparser "go/parser"
 	"go/token"
-	"golang.org/x/tools/go/packages"
 	"log"
 	"math/rand"
 	"net/http"
@@ -14,6 +13,8 @@ import (
 	"strings"
 	"text/template"
 	"time"
+
+	"golang.org/x/tools/go/packages"
 
 	"github.com/go-openapi/jsonreference"
 	"github.com/go-openapi/spec"
@@ -704,6 +705,8 @@ var regexAttributes = map[string]*regexp.Regexp{
 	"maxlength": regexp.MustCompile(`(?i)maxlength\(.*\)`),
 	// for format(email)
 	"format": regexp.MustCompile(`(?i)format\(.*\)`),
+	// for example(0)
+	"example": regexp.MustCompile(`(?i)example\(.*\)`),
 }
 
 func GetAllExtraction(commentLine string) string {
@@ -772,6 +775,16 @@ func (operation *Operation) parseAndExtractionParamAttribute(commentLine, schema
 				return nil
 			}
 			param.Default = value
+		case "example":
+			attr, err := findAttr(re, commentLine)
+			if err != nil {
+				break
+			}
+			value, err := defineTypeOfExample(schemaType, "", attr)
+			if err != nil {
+				return nil
+			}
+			param.Example = value
 		case "maxlength":
 			attr, err := findAttr(re, commentLine)
 			if err != nil {
