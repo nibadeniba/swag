@@ -1542,13 +1542,14 @@ func defineTypeOfExample(schemaType, arrayType, exampleValue string) (interface{
 	case "number":
 		v, err := strconv.ParseFloat(exampleValue, 64)
 		if err != nil {
-			return nil, fmt.Errorf("example value %s can't convert to %s err: %s", exampleValue, schemaType, err)
+			// 直接返回
+			return exampleValue, nil
 		}
 		return v, nil
 	case "integer":
 		v, err := strconv.Atoi(exampleValue)
 		if err != nil {
-			return nil, fmt.Errorf("example value %s can't convert to %s err: %s", exampleValue, schemaType, err)
+			return exampleValue, nil
 		}
 		return v, nil
 	case "boolean":
