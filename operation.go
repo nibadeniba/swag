@@ -170,7 +170,7 @@ func (self *StructPto) Map2GoFile(structPrefix string, srcAstFile *ast.File, ope
 		}
 
 		if e.Required {
-			e.Ex += " validate#required%"
+			e.Ex += " validate<required>"
 		}
 
 		newFields = append(newFields, *e)
@@ -190,10 +190,10 @@ func (self *StructPto) Map2GoFile(structPrefix string, srcAstFile *ast.File, ope
 	}
 
 	var r string
-	r = strings.ReplaceAll(result.String(), "#", ":\"")
-	r = strings.ReplaceAll(r, "%", "\"")
+	r = strings.ReplaceAll(result.String(), "<", ":\"")
+	r = strings.ReplaceAll(r, ">", "\"")
 	r = strings.ReplaceAll(r, "^", "`")
-	fmt.Println(r)
+	//fmt.Println(r)
 	return r
 }
 
@@ -290,7 +290,7 @@ func (self *FieldPto) Map2GoStruct(operation *Operation, srcAstFile *ast.File) s
 			}
 
 			if e.Required {
-				e.Ex += " validate#required%"
+				e.Ex += " validate<required>"
 			}
 
 			newFields = append(newFields, *e)
@@ -692,21 +692,21 @@ func regNestFields(ps []*packages.Package, nestNames []string, pkgName string, t
 
 var regexAttributes = map[string]*regexp.Regexp{
 	// for Enums(A, B)
-	"enums": regexp.MustCompile(`(?i)enums#.*%`),
+	"enums": regexp.MustCompile(`(?i)enums<.*>`),
 	// for Minimum(0)
-	"maxinum": regexp.MustCompile(`(?i)maxinum#.*%`),
+	"maxinum": regexp.MustCompile(`(?i)maxinum<.*>`),
 	// for Maximum(0)
-	"mininum": regexp.MustCompile(`(?i)mininum#.*%`),
+	"mininum": regexp.MustCompile(`(?i)mininum<.*>`),
 	// for Maximum(0)
-	"default": regexp.MustCompile(`(?i)default#.*%`),
+	"default": regexp.MustCompile(`(?i)default<.*>`),
 	// for minlength(0)
-	"minlength": regexp.MustCompile(`(?i)minlength#.*%`),
+	"minlength": regexp.MustCompile(`(?i)minlength<.*>`),
 	// for maxlength(0)
-	"maxlength": regexp.MustCompile(`(?i)maxlength#.*%`),
+	"maxlength": regexp.MustCompile(`(?i)maxlength<.*>`),
 	// for format(email)
-	"format": regexp.MustCompile(`(?i)format#.*%`),
+	"format": regexp.MustCompile(`(?i)format<.*>`),
 	// for example(0)
-	"example": regexp.MustCompile(`(?i)example#.*%`),
+	"example": regexp.MustCompile(`(?i)example<.*>`),
 }
 
 func GetAllExtraction(commentLine string) string {
