@@ -11,11 +11,12 @@ import (
 )
 
 const (
-	EC_G    = "http://ec.doc.dlab.cn/json/group.json"
-	CMS_G   = "http://c.doc.dlab.cn/json/group.json"
-	DIRFT_G = "http://drift.doc.dlab.cn/json/group.json"
-	APP_G   = "http://app.doc.dlab.cn/json/group.json"
-	OPS_G   = "http://ops.doc.dlab.cn/json/group.json"
+	EC_G     = "http://ec.doc.dlab.cn/json/group.json"
+	CMS_G    = "http://c.doc.dlab.cn/json/group.json"
+	DIRFT_G  = "http://drift.doc.dlab.cn/json/group.json"
+	APP_G    = "http://app.doc.dlab.cn/json/group.json"
+	OPS_G    = "http://ops.doc.dlab.cn/json/group.json"
+	COMMON_G = "http://common.doc.dlab.cn/json/group.json"
 )
 
 type Push struct {
@@ -73,6 +74,8 @@ func (f *Push) Build(config *Config) error {
 		urlF = APP_G
 	} else if system == "ops" {
 		urlF = OPS_G
+	} else if system == "common" {
+		urlF = COMMON_G
 	}
 
 	resp, err := http.Get(urlF)
