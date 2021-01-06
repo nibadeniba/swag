@@ -60,6 +60,19 @@ func parseFieldSelectorExpr(astTypeSelectorExpr *ast.SelectorExpr, parser *Parse
 			parser.ParseDefinition(pkgName.Name, astTypeSelectorExpr.Sel.Name, typeDefinitions)
 			return propertyNewFunc(astTypeSelectorExpr.Sel.Name, pkgName.Name)
 		}
+		if aliasedNames, ok := parser.ImportAliases[pkgName.Name]; ok {
+			for aliasedName := range aliasedNames {
+				if typeDefinitions, ok := parser.TypeDefinitions[aliasedName][astTypeSelectorExpr.Sel.Name]; ok {
+					if expr, ok := typeDefinitions.Type.(*ast.SelectorExpr); ok {
+						if primitiveType, err := convertFromSpecificToPrimitive(expr.Sel.Name); err == nil {
+							return propertyNewFunc(primitiveType, "")
+						}
+					}
+					parser.ParseDefinition(aliasedName, astTypeSelectorExpr.Sel.Name, typeDefinitions)
+					return propertyNewFunc(astTypeSelectorExpr.Sel.Name, aliasedName)
+				}
+			}
+		}
 		if actualPrimitiveType, isCustomType := parser.CustomPrimitiveTypes[astTypeSelectorExpr.Sel.Name]; isCustomType {
 			return propertyName{SchemaType: actualPrimitiveType, ArrayType: actualPrimitiveType}
 		}
@@ -91,11 +104,11 @@ func getPropertyName(expr ast.Expr, parser *Parser) (propertyName, error) {
 	}
 
 	if astTypeArray, ok := expr.(*ast.ArrayType); ok { // if array
-		if _, ok := astTypeArray.Elt.(*ast.StructType); ok {
+		if _, ok := astTypeArray.Elt.(*ast.StructType); ok { //  []struct{}
 			return propertyName{SchemaType: "array", ArrayType: "object"}, nil
-		} else if _, ok := astTypeArray.Elt.(*ast.MapType); ok {
+		} else if _, ok := astTypeArray.Elt.(*ast.MapType); ok { // []map[string]interface{}
 			return propertyName{SchemaType: "array", ArrayType: "object"}, nil
-		} else if _, ok := astTypeArray.Elt.(*ast.InterfaceType); ok {
+		} else if _, ok := astTypeArray.Elt.(*ast.InterfaceType); ok { // []interface{}
 			return propertyName{SchemaType: "array", ArrayType: "object"}, nil
 		}
 		return getArrayPropertyName(astTypeArray, parser), nil

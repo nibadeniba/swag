@@ -48,6 +48,9 @@ type Parser struct {
 	// TypeDefinitions is a map that stores [package name][type name][*ast.TypeSpec]
 	TypeDefinitions map[string]map[string]*ast.TypeSpec
 
+	// ImportAliases is map that stores [import name][import package name][*ast.ImportSpec]
+	ImportAliases map[string]map[string]*ast.ImportSpec
+
 	// CustomPrimitiveTypes is a map that stores custom primitive types to actual golang types [type name][string]
 	CustomPrimitiveTypes map[string]string
 
@@ -89,6 +92,7 @@ func New(options ...func(*Parser)) *Parser {
 		},
 		files:                make(map[string]*ast.File),
 		TypeDefinitions:      make(map[string]map[string]*ast.TypeSpec),
+		ImportAliases:        make(map[string]map[string]*ast.ImportSpec),
 		CustomPrimitiveTypes: make(map[string]string),
 		registerTypes:        make(map[string]*ast.TypeSpec),
 	}
@@ -696,6 +700,23 @@ func (parser *Parser) ParseType(astFile *ast.File) {
 			}
 		}
 	}
+
+	for _, importSpec := range astFile.Imports {
+		if importSpec.Name == nil {
+			continue
+		}
+
+		alias := importSpec.Name.Name
+
+		if _, ok := parser.ImportAliases[alias]; !ok {
+			parser.ImportAliases[alias] = make(map[string]*ast.ImportSpec)
+		}
+
+		importParts := strings.Split(strings.Trim(importSpec.Path.Value, "\""), "/")
+		importPkgName := importParts[len(importParts)-1]
+
+		parser.ImportAliases[alias][importPkgName] = importSpec
+	}
 }
 
 func (parser *Parser) isInStructStack(refTypeName string) bool {
@@ -851,6 +872,7 @@ func (parser *Parser) parseTypeExpr(pkgName, typeName string, typeExpr ast.Expr)
 		if xIdent, ok := expr.X.(*ast.Ident); ok {
 			pkgName = xIdent.Name
 			typeName = expr.Sel.Name
+			fmt.Println(" ---CC ", pkgName, typeName)
 			refTypeName := fullTypeName(pkgName, typeName)
 			if _, isParsed := parser.swagger.Definitions[refTypeName]; !isParsed {
 				typedef := parser.TypeDefinitions[pkgName][typeName]
