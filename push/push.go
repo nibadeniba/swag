@@ -17,6 +17,7 @@ const (
 	APP_G    = "http://app.doc.dlab.cn/json/group.json"
 	OPS_G    = "http://ops.doc.dlab.cn/json/group.json"
 	COMMON_G = "http://common.doc.dlab.cn/json/group.json"
+	CRM_G    = "http://crm.doc.dlab.cn/json/group.json"
 )
 
 type Push struct {
@@ -76,6 +77,8 @@ func (f *Push) Build(config *Config) error {
 		urlF = OPS_G
 	} else if system == "common" {
 		urlF = COMMON_G
+	} else if system == "crm" {
+		urlF = CRM_G
 	}
 
 	resp, err := http.Get(urlF)
